@@ -17,22 +17,25 @@ end
 --- Loads both level and statistics data from the database
 -- @param load_level_callback Callback function to be called after level data is loaded
 -- @param load_stat_callback Callback function to be called after statistics data is loaded
-function Paragon:load(load_level_callback, load_stat_callback)
-    self:load_level(load_level_callback)
+function Paragon:Load(load_stat_callback)
+    self:load_level()
     self:load_stat(load_stat_callback)
+end
+
+function Paragon:Save()
+    Repository:SaveParagonCharacterStat(self.guid, self.statistics)
+    -- Repository:SaveParagonCharacter(self.guid, self.level, self.exp)
 end
 
 --- Asynchronously loads the paragon level and experience data from the database
 -- @param callback Function to be called with (guid, self) after data is loaded
-function Paragon:load_level(callback)
+function Paragon:load_level()
     Repository:GetParagonByCharacter(self.guid, function(data)
         if (data) then
             self.level = data.level
             self.exp.current = data.current_experience
             self.exp.max = tonumber(Config:GetByField("BASE_MAX_EXPERIENCE")) * self.level
         end
-
-        callback(self.guid, self)
     end)
 end
 
@@ -102,6 +105,26 @@ end
 function Paragon:SetExperienceForNextLevel(experience)
     self.exp.max = experience
     return self
+end
+
+function Paragon:GetStatistics()
+    return self.statistics
+end
+
+function Paragon:GetStatValue(statistic)
+    return self.statistics[statistic] or 0
+end
+
+function Paragon:SetStatValue(statistic, value)
+    local old_stat_value = self.statistics[statistic]
+    if (old_stat_value) then
+        self.statistics[statistic] = value
+    end
+    return self
+end
+
+function Paragon:AddStatValue(statistic, value)
+    return self:SetStatValue(statistic, self:GetStatValue(statistic) + value)
 end
 
 return Paragon

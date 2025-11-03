@@ -24,6 +24,10 @@ function Repository:ExecuteMigration()
     -- Create table for paragon data if needed
     CharDBExecute(sf(Constants.QUERY.CR_TABLE_PARA, Constants.DB_NAME))
     CharDBExecute(sf(Constants.QUERY.CR_TABLE_PARA_STAT, Constants.DB_NAME))
+
+    -- Create trigger for config
+    CharDBExecute(sf(Constants.QUERY.CT_TRIGGER_BU_CONFIG_STAT, Constants.DB_NAME, Constants.DB_NAME))
+    CharDBExecute(sf(Constants.QUERY.CT_TRIGGER_BI_CONFIG_STAT, Constants.DB_NAME, Constants.DB_NAME))
 end
 
 --- Retrieves all paragon configuration categories from the database
@@ -55,8 +59,8 @@ function Repository:GetConfigStatistics()
         local stat_id           = results:GetUInt32(0)
         local stat_cat          = results:GetUInt32(1)
         local stat_type         = results:GetString(2)
-        local stat_value        = results:GetUInt32(3)
-        local stat_icon         = results:GetUInt32(4)
+        local stat_value        = results:GetString(3)
+        local stat_icon         = results:GetString(4)
         local stat_factor       = results:GetUInt32(5)
         local stat_limit        = results:GetUInt32(6)
         local stat_application  = results:GetUInt32(7)
@@ -127,6 +131,12 @@ function Repository:GetConfig()
     until not results:NextRow()
 
     return config
+end
+
+function Repository:SaveParagonCharacterStat(guid, statistics)
+    for stat_id, stat_value in pairs(statistics) do
+        CharDBExecute(sf(Constants.QUERY.INS_PARA_STAT, Constants.DB_NAME, guid, stat_id, stat_value))
+    end
 end
 
 --- Gets the singleton instance of Repository

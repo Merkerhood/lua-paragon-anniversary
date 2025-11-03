@@ -25,7 +25,7 @@ return {
         ]],
 
         -- Select all categories
-        SEL_CONFIG_CAT = "SELECT `id`, `name` FROM `%s`.`paragon_config_category`",
+        SEL_CONFIG_CAT = "SELECT `id`, `name` FROM `%s`.`paragon_config_category`;",
 
         --- Statistic Configuration Table
         -- Defines available paragon statistics with their properties
@@ -53,8 +53,16 @@ return {
             );
         ]],
 
+        CT_TRIGGER_BU_CONFIG_STAT = [[
+                CREATE TRIGGER IF NOT EXISTS `%s`.`paragon_config_statistics_before_insert` BEFORE INSERT ON `%s`.`paragon_config_statistic` FOR EACH ROW BEGIN DECLARE v_type VARCHAR(50); DECLARE v_value VARCHAR(50); SET v_type = NEW.type; SET v_value = NEW.type_value; IF v_type = 'COMBAT_RATING' THEN IF v_value NOT IN ( 'WEAPON_SKILL', 'DEFENSE_SKILL', 'DODGE', 'PARRY', 'BLOCK', 'HIT_MELEE', 'HIT_RANGED', 'HIT_SPELL', 'CRIT_MELEE', 'CRIT_RANGED', 'CRIT_SPELL', 'HIT_TAKEN_MELEE', 'HIT_TAKEN_RANGED', 'HIT_TAKEN_SPELL', 'CRIT_TAKEN_MELEE', 'CRIT_TAKEN_RANGED', 'CRIT_TAKEN_SPELL', 'HASTE_MELEE', 'HASTE_RANGED', 'HASTE_SPELL', 'WEAPON_SKILL_MAINHAND', 'WEAPON_SKILL_OFFHAND', 'WEAPON_SKILL_RANGED', 'EXPERTISE', 'ARMOR_PENETRATION' ) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid COMBAT_RATING value for this type.'; END IF; END IF; IF v_type = 'UNIT_MODS' THEN IF v_value NOT IN ( 'STAT_STRENGTH', 'STAT_AGILITY', 'STAT_STAMINA', 'STAT_INTELLECT', 'STAT_SPIRIT', 'HEALTH', 'MANA', 'RAGE', 'FOCUS', 'ENERGY', 'HAPPINESS', 'RUNE', 'RUNIC_POWER', 'ARMOR', 'RESISTANCE_HOLY', 'RESISTANCE_FIRE', 'RESISTANCE_NATURE', 'RESISTANCE_FROST', 'RESISTANCE_SHADOW', 'RESISTANCE_ARCANE', 'ATTACK_POWER', 'ATTACK_POWER_RANGED', 'DAMAGE_MAINHAND', 'DAMAGE_OFFHAND', 'DAMAGE_RANGED' ) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid UNIT_MODS value for this type.'; END IF; END IF; IF v_type = 'AURA' THEN IF v_value NOT IN ('LOOT', 'REPUTATION', 'EXPERIENCE') THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid AURA value for this type.'; END IF; END IF; END;
+        ]],
+
+        CT_TRIGGER_BI_CONFIG_STAT = [[
+                CREATE TRIGGER IF NOT EXISTS `%s`.`paragon_config_statistics_before_update` BEFORE UPDATE ON `%s`.`paragon_config_statistic` FOR EACH ROW BEGIN DECLARE v_type VARCHAR(50); DECLARE v_value VARCHAR(50); SET v_type = NEW.type; SET v_value = NEW.type_value; IF v_type = 'COMBAT_RATING' THEN IF v_value NOT IN ( 'WEAPON_SKILL', 'DEFENSE_SKILL', 'DODGE', 'PARRY', 'BLOCK', 'HIT_MELEE', 'HIT_RANGED', 'HIT_SPELL', 'CRIT_MELEE', 'CRIT_RANGED', 'CRIT_SPELL', 'HIT_TAKEN_MELEE', 'HIT_TAKEN_RANGED', 'HIT_TAKEN_SPELL', 'CRIT_TAKEN_MELEE', 'CRIT_TAKEN_RANGED', 'CRIT_TAKEN_SPELL', 'HASTE_MELEE', 'HASTE_RANGED', 'HASTE_SPELL', 'WEAPON_SKILL_MAINHAND', 'WEAPON_SKILL_OFFHAND', 'WEAPON_SKILL_RANGED', 'EXPERTISE', 'ARMOR_PENETRATION' ) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid COMBAT_RATING value for this type.'; END IF; END IF; IF v_type = 'UNIT_MODS' THEN IF v_value NOT IN ( 'STAT_STRENGTH', 'STAT_AGILITY', 'STAT_STAMINA', 'STAT_INTELLECT', 'STAT_SPIRIT', 'HEALTH', 'MANA', 'RAGE', 'FOCUS', 'ENERGY', 'HAPPINESS', 'RUNE', 'RUNIC_POWER', 'ARMOR', 'RESISTANCE_HOLY', 'RESISTANCE_FIRE', 'RESISTANCE_NATURE', 'RESISTANCE_FROST', 'RESISTANCE_SHADOW', 'RESISTANCE_ARCANE', 'ATTACK_POWER', 'ATTACK_POWER_RANGED', 'DAMAGE_MAINHAND', 'DAMAGE_OFFHAND', 'DAMAGE_RANGED' ) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid UNIT_MODS value for this type.'; END IF; END IF; IF v_type = 'AURA' THEN IF v_value NOT IN ('LOOT', 'REPUTATION', 'EXPERIENCE') THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid AURA value for this type.'; END IF; END IF; END;
+        ]],
+
         -- Select all statistic configurations
-        SEL_CONFIG_STAT = "SELECT `id`, `category`, `type`, `type_value`, `icon`, `factor`, `limit`, `application` FROM `%s`.`paragon_config_statistic`",
+        SEL_CONFIG_STAT = "SELECT `id`, `category`, `type`, `type_value`, `icon`, `factor`, `limit`, `application` FROM `%s`.`paragon_config_statistic`;",
 
         --- General Configuration Table
         -- Stores key-value pairs for general paragon settings
@@ -69,7 +77,7 @@ return {
         ]],
 
         -- Select all configuration settings
-        SEL_CONFIG = "SELECT `field`, `value` FROM `%s`.`paragon_config`",
+        SEL_CONFIG = "SELECT `field`, `value` FROM `%s`.`paragon_config`;",
 
         --- Character Paragon Table
         -- Stores each character's paragon level and experience
@@ -84,7 +92,7 @@ return {
         ]],
 
         -- Select paragon level and experience for a character
-        SEL_PARA = "SELECT level, experience FROM `%s`.`character_paragon` WHERE guid = %d",
+        SEL_PARA = "SELECT level, experience FROM `%s`.`character_paragon` WHERE guid = %d;",
 
         --- Character Paragon Statistics Table
         -- Stores stat points invested by each character
@@ -99,7 +107,9 @@ return {
         ]],
 
         -- Select all statistics for a character
-        SEL_PARA_STAT = "SELECT stat_id, stat_value FROM `%s`.`character_paragon_stats` WHERE guid = %d"
+        SEL_PARA_STAT = "SELECT stat_id, stat_value FROM `%s`.`character_paragon_stats` WHERE guid = %d;",
+
+        INS_PARA_STAT = "INSERT INTO `%s`.`character_paragon_stats` (guid, stat_id, stat_value) VALUES (%d, %d, %d) ON DUPLICATE KEY UPDATE stat_value = VALUES(stat_value);"
     },
 
     --- Statistic Type Enumerations
