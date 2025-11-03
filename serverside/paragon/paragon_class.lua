@@ -22,6 +22,8 @@ function Paragon:Load(load_stat_callback)
     self:load_stat(load_stat_callback)
 end
 
+--- Saves the paragon instance data to the database
+-- Persists all paragon statistics for this character
 function Paragon:Save()
     Repository:SaveParagonCharacterStat(self.guid, self.statistics)
     -- Repository:SaveParagonCharacter(self.guid, self.level, self.exp)
@@ -107,14 +109,23 @@ function Paragon:SetExperienceForNextLevel(experience)
     return self
 end
 
+--- Gets all paragon statistics
+-- @return Table containing all invested statistic values
 function Paragon:GetStatistics()
     return self.statistics
 end
 
+--- Gets the value of a specific statistic
+-- @param statistic The statistic ID to retrieve
+-- @return The statistic value or 0 if not set
 function Paragon:GetStatValue(statistic)
     return self.statistics[statistic] or 0
 end
 
+--- Sets the value of a specific statistic
+-- @param statistic The statistic ID to update
+-- @param value The new value to set
+-- @return Self for method chaining
 function Paragon:SetStatValue(statistic, value)
     local old_stat_value = self.statistics[statistic]
     if (old_stat_value) then
@@ -123,6 +134,10 @@ function Paragon:SetStatValue(statistic, value)
     return self
 end
 
+--- Adds to the value of a specific statistic
+-- @param statistic The statistic ID to increment
+-- @param value The amount to add
+-- @return Self for method chaining
 function Paragon:AddStatValue(statistic, value)
     return self:SetStatValue(statistic, self:GetStatValue(statistic) + value)
 end

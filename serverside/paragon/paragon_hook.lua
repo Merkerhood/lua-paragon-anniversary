@@ -26,6 +26,11 @@ local function GetPlayerIfExist(guid_low)
     return player
 end
 
+--- Updates player statistics modifiers based on paragon data
+-- Applies or removes stat bonuses to the player's character
+-- @param player The player object to update
+-- @param paragon The paragon instance containing stat data
+-- @param apply Boolean indicating whether to apply (true) or remove (false) the bonuses
 local function UpdatePlayerStatistics(player, paragon, apply)
     if (not apply) then apply = false end
 
@@ -70,24 +75,28 @@ function OnClientLoadRequest(player, _)
     player:SendServerResponse(Hook.Addon.Prefix, 3, temp)
 end
 
+--- Handles client request to update paragon statistics
+-- Validates and applies updated statistic values from the client addon
+-- @param player The player object making the request
+-- @param arg_table Table containing the statistics data to update
 function OnClientSendStatistics(player, arg_table)
     local data = arg_table[1]
     if (not data) then
-        -- Le joueur a tenté d'envoyer un packet vide
-        player:SendNotification("ERREUR.")
+        -- Player attempted to send an empty packet
+        player:SendNotification("ERROR.")
         return false
     end
 
     local paragon = player:GetData("Paragon")
     if (not paragon) then return false end
 
-    -- Retire les statistics, le temps du traitement
+    -- Remove statistics temporarily during processing
     UpdatePlayerStatistics(player, paragon, false)
 
     for _, updated_data in pairs(data) do
         local category_id = updated_data.categoryId
         if (not category_id) then return false end
-        
+
         local categories = Config:GetCategories()
         local category_data = categories[category_id]
         if (not category_data) then return false end
@@ -100,15 +109,15 @@ function OnClientSendStatistics(player, arg_table)
 
         local statistic_value = updated_data.value
         if (not statistic_value or statistic_value < 0) then return false end
-        
+
         if (statistic_data.limit > 0 and statistic_value > statistic_data.limit) then return false end
 
-        -- TODO: Vérifier que le nombre de point dépensé est bien correct avec le nombre de points disponible.
+        -- TODO: Verify that the number of points spent matches available points
         print('ok')
         paragon:SetStatValue(statistic_id, statistic_value)
     end
 
-    -- Ont met à jour les statistics aprés le traitement
+    -- Reapply statistics after processing
     UpdatePlayerStatistics(player, paragon, true)
 end
 
@@ -139,6 +148,10 @@ function Hook.OnPlayerLogin(event, player)
 
 end
 
+--- Event handler triggered when a player logs out of the server
+-- Removes stat bonuses and saves paragon progress to the database
+-- @param event The event ID (4 = PLAYER_EVENT_ON_LOGOUT)
+-- @param player The player object that logged out
 function Hook.OnPlayerLogout(event, player)
     local paragon = player:GetData("Paragon")
     if (not paragon) then return end
@@ -147,19 +160,29 @@ function Hook.OnPlayerLogout(event, player)
     paragon:Save()
 end
 
+--- Event handler triggered when the Lua state (world) is opened
+-- Reloads paragon data for all players currently in the world
+-- @param event The event ID (33 = SERVER_EVENT_ON_LUA_STATE_OPEN)
 function Hook.OnLuaStateOpen(event)
     for _, player in pairs(GetPlayersInWorld()) do
         Hook.OnPlayerLogin(3, player)
     end
 end
 
+--- Event handler triggered when the Lua state (world) is closed
+-- Saves paragon data for all players currently in the world
+-- @param event The event ID (16 = SERVER_EVENT_ON_LUA_STATE_CLOSE)
 function Hook.OnLuaStateClose(event)
     for _, player in pairs(GetPlayersInWorld()) do
         Hook.OnPlayerLogout(4, player)
     end
 end
 
-
+--- Event handler triggered when a player enters a command
+-- Handles test command for paragon system debugging
+-- @param event The event ID (42 = PLAYER_EVENT_ON_COMMAND)
+-- @param player The player object executing the command
+-- @param command The command string entered by the player
 function Hook.OnPlayerCommand(event, player, command)
     if (command == "test") then
         local paragon = player:GetData("Paragon")

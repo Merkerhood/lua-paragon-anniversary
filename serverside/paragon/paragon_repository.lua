@@ -133,6 +133,10 @@ function Repository:GetConfig()
     return config
 end
 
+--- Saves paragon statistics for a character to the database
+-- Persists all stat investments for a character
+-- @param guid The character's GUID
+-- @param statistics Table of statistics indexed by stat_id with stat_value
 function Repository:SaveParagonCharacterStat(guid, statistics)
     for stat_id, stat_value in pairs(statistics) do
         CharDBExecute(sf(Constants.QUERY.INS_PARA_STAT, Constants.DB_NAME, guid, stat_id, stat_value))
