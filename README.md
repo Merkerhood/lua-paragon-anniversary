@@ -168,13 +168,14 @@ Configure the system via database entries in `paragon_config`:
 ### Client Communication
 - **Protocol**: `ParagonAnniversary` addon prefix
 - **Commands**:
-  - `1`: Send paragon level
-  - `2`: Send experience (current/max)
+  - `1`: Load paragon data (sends level, experience, and all statistics)
+  - `2`: Update statistics (receives updated stat values from client)
 
 ### Event Hooks
 - **PLAYER_EVENT_ON_LOGIN (3)**: Load paragon data on login
-- **SERVER_EVENT_ON_START (33)**: Server initialization
-- **PLAYER_EVENT_ON_COMMAND (42)**: Handle commands
+- **PLAYER_EVENT_ON_LOGOUT (4)**: Save paragon data on logout
+- **SERVER_EVENT_ON_LUA_STATE_OPEN (33)**: Reload paragon data for all players when Lua state opens
+- **SERVER_EVENT_ON_LUA_STATE_CLOSE (16)**: Save paragon data for all players when Lua state closes
 
 ---
 
@@ -208,15 +209,14 @@ end
 
 ```
 paragon/
-├──lib
+├── lib/
 │   ├── classic/
 │   │   └── classic.ext
 │   └── CSMH/
 │       └── SMH.ext
-├── config/
-│   └── paragon_config.lua          # Configuration service (Singleton)
 ├── paragon_constant.lua            # Constants, queries, stat enums
 ├── paragon_repository.lua          # Database access layer (Singleton)
+├── paragon_config.lua              # Configuration service (Singleton)
 ├── paragon_class.lua               # Paragon entity class
 ├── paragon_hook.lua                # Event handlers & main entry point
 └── README.md                       # This file
@@ -233,11 +233,11 @@ Hook.OnPlayerLogin (paragon_hook.lua)
     ↓
 Create Paragon Instance (paragon_class.lua)
     ↓
-Load Data from DB (paragon_repository.lua)
+Load Level & Statistics from DB (paragon_repository.lua)
     ↓
-Callbacks: OnPlayerLevelLoad & OnPlayerStatLoad
+Callback: Hook.OnPlayerStatLoad
     ↓
-Send Data to Client (ParagonAnniversary addon)
+Apply Statistics to Player & Send Data to Client (ParagonAnniversary addon)
 ```
 
 ---
