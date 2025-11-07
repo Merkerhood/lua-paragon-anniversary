@@ -35,6 +35,8 @@ The **Paragon System** introduces an endgame progression mechanic for AzerothCor
   - **Combat**: Hit, Crit, Haste, Expertise, Armor Penetration
   - **Stats**: Strength, Agility, Stamina, Resistances, HP/Mana
   - **Auras**: Loot, Reputation, and Experience bonuses
+- **🎮 Multi-Source Experience**: Gain paragon XP from creatures, achievements, quests, and skills
+- **💰 Point System**: Earn points to distribute among available statistics
 - **🔄 Client Integration**: In-game interface via custom addon
 - **💾 Persistent**: All progress saved to database
 
@@ -59,9 +61,16 @@ The **Paragon System** introduces an endgame progression mechanic for AzerothCor
 
 ### 🗄️ **Database**
 
+**Configuration Tables:**
 - `paragon_config_category` - Stat categories
 - `paragon_config_statistic` - Available stats
 - `paragon_config` - General settings
+- `paragon_config_experience_creature` - Creature experience rewards
+- `paragon_config_experience_achievement` - Achievement experience rewards
+- `paragon_config_experience_skill` - Skill experience rewards
+- `paragon_config_experience_quest` - Quest experience rewards
+
+**Character Data:**
 - `character_paragon` - Player levels & XP
 - `character_paragon_stats` - Invested points
 
@@ -96,6 +105,11 @@ Configure the system via database entries in `paragon_config`:
 | Field | Description | Example |
 |-------|-------------|---------|
 | `BASE_MAX_EXPERIENCE` | XP needed per level (multiplied by level) | `1000` |
+| `POINTS_PER_LEVEL` | Points awarded per paragon level | `1` |
+| `UNIVERSAL_CREATURE_EXPERIENCE` | Default experience reward for creature kills | `50` |
+| `UNIVERSAL_ACHIEVEVEMENT_EXPERIENCE` | Default experience reward for achievements | `100` |
+| `UNIVERSAL_SKILL_EXPERIENCE` | Default experience reward for skill increases | `25` |
+| `UNIVERSAL_QUEST_EXPERIENCE` | Default experience reward for quest completion | `75` |
 
 ### Adding Custom Stats
 
@@ -174,8 +188,33 @@ Configure the system via database entries in `paragon_config`:
 ### Event Hooks
 - **PLAYER_EVENT_ON_LOGIN (3)**: Load paragon data on login
 - **PLAYER_EVENT_ON_LOGOUT (4)**: Save paragon data on logout
+- **PLAYER_EVENT_ON_KILL_CREATURE (7)**: Award paragon experience for creature kills
+- **PLAYER_EVENT_ON_ACHIEVEMENT_COMPLETE (45)**: Award paragon experience for achievements
+- **PLAYER_EVENT_ON_QUEST_COMPLETE (54)**: Award paragon experience for quests
+- **PLAYER_EVENT_ON_SKILL_UPDATE (62)**: Award paragon experience for skill increases
 - **SERVER_EVENT_ON_LUA_STATE_OPEN (33)**: Reload paragon data for all players when Lua state opens
 - **SERVER_EVENT_ON_LUA_STATE_CLOSE (16)**: Save paragon data for all players when Lua state closes
+
+---
+
+## 🎓 Experience & Points System
+
+### Experience Sources
+Paragon experience is awarded from multiple activities:
+- **🐉 Creatures**: Kill monsters and bosses
+- **🏆 Achievements**: Complete achievement goals
+- **📜 Quests**: Complete quests
+- **🎯 Skills**: Increase character skills
+
+Experience rewards are configurable per source with:
+- **Universal default**: Base experience reward value for each source type
+- **Specific rewards**: Custom experience values per creature/achievement/quest/skill ID (overrides universal default)
+
+### Points System
+- **Earning**: Players earn a configurable number of points per paragon level (`POINTS_PER_LEVEL`)
+- **Available Points**: Points = (Level × Points Per Level) - (Total Points Spent)
+- **Investing**: Allocate points to statistics with configured limits per stat (max 255 points each)
+- **Validation**: Server validates all point allocations before applying stat bonuses
 
 ---
 
@@ -184,11 +223,18 @@ Configure the system via database entries in `paragon_config`:
 All code is fully documented with **LuaDoc** comments:
 
 ```lua
---- Retrieves a specific category by its ID
--- @param id The category ID to retrieve
--- @return The category data or nil if not found
-function ConfigService:GetByCategoryId(id)
-    return self.categories[id] or nil
+--- Adds points to the available paragon points
+-- @param points The amount of points to add
+-- @return Self for method chaining
+function Paragon:AddPoints(points)
+    return self:SetPoints(self:GetPoints() + points)
+end
+
+--- Retrieves the paragon experience reward for a creature by entry ID
+-- @param entry The creature entry ID
+-- @return The experience reward value or nil if not configured
+function Config:GetCreatureExperience(entry)
+    return self.experience.creature[entry]
 end
 ```
 
