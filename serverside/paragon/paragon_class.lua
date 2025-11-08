@@ -1,181 +1,596 @@
+--[[
+    Paragon Class
+
+    Represents a character's paragon progression system.
+    Manages level, experience, statistics, and available points.
+
+    Design Philosophy:
+    ==================
+    This class manages the core paragon data and logic. It triggers Mediator
+    events when state changes occur, allowing other modules to react without
+    tight coupling.
+
+    Key Features:
+    - Automatic recalculation of experience thresholds on level change
+    - Automatic recalculation of available points when stats change
+    - Input validation on all setters
+    - Mediator events for state change tracking
+    - Method chaining for fluent API
+
+    Mediator Events:
+    ================
+    - OnParagonLevelChanged: (paragon, old_level, new_level)
+    - OnParagonExperienceChanged: (paragon, old_exp, new_exp)
+    - OnParagonPointsChanged: (paragon, old_points, new_points)
+    - OnParagonStatChanged: (paragon, old_stat_value, new_stat_value)
+
+    @class Paragon
+    @author iThorgrim
+    @license AGL v3
+]]
+
 local Repository = require("paragon_repository")
 local Config = require("paragon_config")
 
 local Paragon = Object:extend()
 
---- Local Functions
-local function CalculateAvailablePoints(paragon)
-    local used_points = 0
+-- Global Mediator is available (initialized before this module loads)
+-- Used for triggering paragon state change events
 
-    for stat_id, stat_value in pairs(paragon:GetStatistics()) do
+-- ============================================================================
+-- PRIVATE FUNCTIONS
+-- ============================================================================
+
+---
+--- Calculates the maximum experience required for a given level.
+---
+--- @param level The paragon level
+--- @return The maximum experience required for that level
+---
+local function CalculateMaxExperienceForLevel(level)
+    local base_max_exp = tonumber(Config:GetByField("BASE_MAX_EXPERIENCE"))
+    return base_max_exp * level
+end
+
+---
+--- Recalculates available points based on current level and invested statistics.
+---
+--- Available points = (level × POINTS_PER_LEVEL) - invested_points
+---
+--- @param paragon The paragon instance to update
+---
+local function RecalculateAvailablePoints(paragon)
+    local used_points = 0
+    for _, stat_value in pairs(paragon.statistics) do
         used_points = used_points + stat_value
     end
 
-    paragon.points = (paragon.level * Config:GetByField("POINTS_PER_LEVEL")) - used_points
+    local points_per_level = tonumber(Config:GetByField("POINTS_PER_LEVEL"))
+    paragon.points = (paragon.level * points_per_level) - used_points
 end
 
---- Constructor for the Paragon class
--- Initializes a new paragon instance with default values
--- @param player_guid The player's GUID to associate with this paragon instance
+-- ============================================================================
+-- CONSTRUCTOR
+-- ============================================================================
+
+---
+--- Initializes a new Paragon instance with default values.
+---
+--- Initial state:
+--- - Level: 1
+--- - Experience: 0 / max_experience_for_level_1
+--- - Points: 0
+--- - Statistics: empty
+---
+--- @param player_guid The character's GUID to associate with this paragon instance
+---
 function Paragon:new(player_guid)
-    self.level              = 1
-    self.exp                = { current = 0, max = 50 }
-    self.available_points   = self.level
-    self.statistics         = {}
-    self.guid               = player_guid
+    self.guid = player_guid
+    self.level = 1
+    self.exp = {
+        current = 0,
+        max = CalculateMaxExperienceForLevel(self.level)
+    }
+    self.points = 0
+    self.statistics = {}
 end
 
---- Loads both level and statistics data from the database
--- @param load_level_callback Callback function to be called after level data is loaded
--- @param load_stat_callback Callback function to be called after statistics data is loaded
-function Paragon:Load(load_stat_callback)
-    self:load_level()
-    self:load_stat(load_stat_callback)
+-- ============================================================================
+-- DATABASE OPERATIONS
+-- ============================================================================
+
+---
+--- Asynchronously loads both level/experience and statistics from the database.
+---
+--- This method initiates two concurrent async queries:
+--- 1. GetParagonByCharacter: loads level and experience
+--- 2. GetParagonStatByCharacter: loads invested statistics
+---
+--- The callback is invoked after both queries complete.
+---
+--- @param callback Function to invoke after loading (receives guid, self)
+---
+function Paragon:Load(callback)
+    self:LoadLevel()
+    self:LoadStats(callback)
 end
 
---- Saves the paragon instance data to the database
--- Persists all paragon statistics for this character
+---
+--- Saves the current paragon statistics to the database.
+---
+--- Only persists statistics - level/exp are managed separately in
+--- paragon_hook.lua when player logs out.
+---
 function Paragon:Save()
     Repository:SaveParagonCharacterStat(self.guid, self.statistics)
-    -- Repository:SaveParagonCharacter(self.guid, self.level, self.exp)
 end
 
---- Asynchronously loads the paragon level and experience data from the database
--- @param callback Function to be called with (guid, self) after data is loaded
-function Paragon:load_level()
+---
+--- Asynchronously loads paragon level and experience data from database.
+---
+--- @private
+---
+function Paragon:LoadLevel()
     Repository:GetParagonByCharacter(self.guid, function(data)
-        if (data) then
+        if data then
             self.level = data.level
             self.exp.current = data.current_experience
-            self.exp.max = tonumber(Config:GetByField("BASE_MAX_EXPERIENCE")) * self.level
+            self.exp.max = CalculateMaxExperienceForLevel(self.level)
         end
     end)
 end
 
---- Asynchronously loads the paragon statistics data from the database
--- @param callback Function to be called with (guid, self) after data is loaded
-function Paragon:load_stat(callback)
+---
+--- Asynchronously loads paragon statistics from database.
+---
+--- After loading, recalculates available points and invokes callback.
+---
+--- @param callback Function to invoke after loading (receives guid, self)
+---
+--- @private
+---
+function Paragon:LoadStats(callback)
     Repository:GetParagonStatByCharacter(self.guid, function(data)
-        if (data) then
+        if data then
             self.statistics = data
         end
 
-        CalculateAvailablePoints(self)
-        callback(self.guid, self)
+        RecalculateAvailablePoints(self)
+
+        if callback then
+            callback(self.guid, self)
+        end
     end)
 end
 
---- Gets the current paragon level
--- @return The current paragon level
+-- ============================================================================
+-- LEVEL ACCESSORS
+-- ============================================================================
+
+---
+--- Gets the current paragon level.
+---
+--- @return The paragon level (≥ 1)
+---
 function Paragon:GetLevel()
     return self.level
 end
 
---- Sets the paragon level
--- @param level The new level to set
--- @return Self for method chaining
+---
+--- Sets the paragon level to a specific value.
+---
+--- Automatically recalculates:
+--- - Maximum experience for the new level
+--- - Available points
+---
+--- @param level The new level to set
+--- @return self For method chaining
+---
 function Paragon:SetLevel(level)
-    self.level = level
-    self.exp.max = tonumber(Config:GetByField("BASE_MAX_EXPERIENCE")) * self.level
-    
-    CalculateAvailablePoints(self)
+    if not level or level < 1 then
+        return self
+    end
+
+    local previous_level = self.level
+    if previous_level ~= level then
+        self.level = level
+        self.exp.max = CalculateMaxExperienceForLevel(level)
+        RecalculateAvailablePoints(self)
+
+        -- Trigger Mediator event after level changes
+        if Mediator then
+            Mediator.On("OnParagonLevelChanged", {
+                arguments = { self, previous_level, level }
+            })
+        end
+    end
+
     return self
 end
 
---- Adds levels to the current paragon level
--- @param level The number of levels to add
--- @return Self for method chaining
-function Paragon:AddLevel(level)
-    return self:SetLevel(self:GetLevel() + level)
+---
+--- Adds one or more levels to the current paragon level.
+---
+--- @param levels The number of levels to add (default: 1)
+--- @return self For method chaining
+---
+function Paragon:AddLevel(levels)
+    levels = levels or 1
+    if levels <= 0 then
+        return self
+    end
+
+    return self:SetLevel(self.level + levels)
 end
 
---- Gets the number of available paragon points
--- @return The number of available points to spend
+-- ============================================================================
+-- POINTS ACCESSORS
+-- ============================================================================
+
+---
+--- Gets the number of available paragon points to invest.
+---
+--- @return The available points (≥ 0)
+---
 function Paragon:GetPoints()
     return self.points
 end
 
---- Sets the number of available paragon points
--- @param points The new number of available points
--- @return Self for method chaining
+---
+--- Sets the available paragon points.
+---
+--- @param points The new number of points (should be ≥ 0)
+--- @return self For method chaining
+---
 function Paragon:SetPoints(points)
-    self.points = points
+    if not points or points < 0 then
+        return self
+    end
+
+    local previous_points = self.points
+    if previous_points ~= points then
+        self.points = points
+
+        -- Trigger Mediator event after points change
+        if Mediator then
+            Mediator.On("OnParagonPointsChanged", {
+                arguments = { self, previous_points, points }
+            })
+        end
+    end
+
     return self
 end
 
---- Adds points to the available paragon points
--- @param points The amount of points to add
--- @return Self for method chaining
-function Paragon:AddPoints(points)
-    return self:SetPoints(self:GetPoints() + points)
+---
+--- Adds points to the available pool.
+---
+--- @param amount The number of points to add
+--- @return self For method chaining
+---
+function Paragon:AddPoints(amount)
+    if not amount or amount <= 0 then
+        return self
+    end
+
+    return self:SetPoints(self.points + amount)
 end
 
---- Gets the current experience points
--- @return The current experience value
+---
+--- Subtracts points from the available pool.
+---
+--- Prevents points from going below zero.
+---
+--- @param amount The number of points to subtract
+--- @return self For method chaining
+---
+function Paragon:SubtractPoints(amount)
+    if not amount or amount <= 0 then
+        return self
+    end
+
+    local new_points = self.points - amount
+    return self:SetPoints(math.max(0, new_points))
+end
+
+---
+--- Checks if there are available points to invest.
+---
+--- @return Boolean indicating if points > 0
+---
+function Paragon:HasAvailablePoints()
+    return self.points > 0
+end
+
+-- ============================================================================
+-- EXPERIENCE ACCESSORS
+-- ============================================================================
+
+---
+--- Gets the current experience points.
+---
+--- @return The current experience (0 to exp.max)
+---
 function Paragon:GetExperience()
     return self.exp.current
 end
 
---- Sets the current experience points
--- @param experience The new experience value to set
--- @return Self for method chaining
+---
+--- Sets the current experience to a specific value.
+---
+--- Clamps value to prevent going below 0 or above max.
+---
+--- @param experience The new experience value
+--- @return self For method chaining
+---
 function Paragon:SetExperience(experience)
-    self.exp.current = experience
+    if not experience or experience < 0 then
+        experience = 0
+    end
+
+    -- Prevent experience from exceeding max (should be handled by caller)
+    experience = math.min(experience, self.exp.max)
+
+    local previous_exp = self.exp.current
+    if previous_exp ~= experience then
+        self.exp.current = experience
+
+        -- Trigger Mediator event after experience changes
+        if Mediator then
+            Mediator.On("OnParagonExperienceChanged", {
+                arguments = { self, previous_exp, experience }
+            })
+        end
+    end
+
     return self
 end
 
---- Adds experience points to the current experience
--- @param experience The amount of experience to add
--- @return Self for method chaining
-function Paragon:AddExperience(experience)
-    return self:SetExperience(self:GetExperience() + experience)
+---
+--- Adds experience points.
+---
+--- Note: Does NOT handle level-ups. Use the Anniversary module for that.
+---
+--- @param amount The amount of experience to add
+--- @return self For method chaining
+---
+function Paragon:AddExperience(amount)
+    if not amount or amount <= 0 then
+        return self
+    end
+
+    local new_exp = self.exp.current + amount
+    return self:SetExperience(new_exp)
 end
 
---- Gets the experience required for the next level
--- @return The maximum experience value needed for next level
+---
+--- Gets the experience required for the next level.
+---
+--- @return The maximum experience threshold for current level
+---
 function Paragon:GetExperienceForNextLevel()
     return self.exp.max
 end
 
---- Sets the experience required for the next level
--- @param experience The new maximum experience value
--- @return Self for method chaining
-function Paragon:SetExperienceForNextLevel(experience)
-    self.exp.max = experience
+---
+--- Gets the current progress toward next level as a percentage.
+---
+--- @return Percentage value (0-100)
+---
+function Paragon:GetExperienceProgress()
+    if self.exp.max == 0 then
+        return 0
+    end
+
+    return (self.exp.current / self.exp.max) * 100
+end
+
+---
+--- Sets the experience threshold for current level.
+---
+--- @param max_experience The new maximum experience value
+--- @return self For method chaining
+---
+function Paragon:SetExperienceForNextLevel(max_experience)
+    if not max_experience or max_experience <= 0 then
+        return self
+    end
+
+    self.exp.max = max_experience
     return self
 end
 
---- Gets all paragon statistics
--- @return Table containing all invested statistic values
+-- ============================================================================
+-- STATISTICS ACCESSORS
+-- ============================================================================
+
+---
+--- Gets all paragon statistics.
+---
+--- @return Table mapping stat_id to invested value
+---
 function Paragon:GetStatistics()
     return self.statistics
 end
 
---- Gets the value of a specific statistic
--- @param statistic The statistic ID to retrieve
--- @return The statistic value or 0 if not set
-function Paragon:GetStatValue(statistic)
-    return self.statistics[statistic] or 0
+---
+--- Gets the invested value for a specific statistic.
+---
+--- @param stat_id The statistic ID to retrieve
+--- @return The invested value (0 if not initialized)
+---
+function Paragon:GetStatValue(stat_id)
+    return self.statistics[stat_id] or 0
 end
 
---- Sets the value of a specific statistic
--- @param statistic The statistic ID to update
--- @param value The new value to set
--- @return Self for method chaining
-function Paragon:SetStatValue(statistic, value)
-    local old_stat_value = self.statistics[statistic]
-    if (old_stat_value) then
-        self.statistics[statistic] = value
+---
+--- Sets the invested value for a specific statistic.
+---
+--- Initializes the statistic if it doesn't exist.
+--- Recalculates available points after change.
+---
+--- @param stat_id The statistic ID to update
+--- @param value The new invested value (≥ 0)
+--- @return self For method chaining
+---
+function Paragon:SetStatValue(stat_id, value)
+    if not stat_id or not value or value < 0 then
+        return self
     end
+
+    local previous_value = self.statistics[stat_id] or 0
+    if previous_value ~= value then
+        self.statistics[stat_id] = value
+        RecalculateAvailablePoints(self)
+
+        -- Trigger Mediator event after stat changes
+        if Mediator then
+            Mediator.On("OnParagonStatChanged", {
+                arguments = { self, stat_id, previous_value, value }
+            })
+        end
+    end
+
     return self
 end
 
---- Adds to the value of a specific statistic
--- @param statistic The statistic ID to increment
--- @param value The amount to add
--- @return Self for method chaining
-function Paragon:AddStatValue(statistic, value)
-    return self:SetStatValue(statistic, self:GetStatValue(statistic) + value)
+---
+--- Adds to the invested value of a specific statistic.
+---
+--- @param stat_id The statistic ID to increment
+--- @param amount The amount to add
+--- @return self For method chaining
+---
+function Paragon:AddStatValue(stat_id, amount)
+    if not stat_id or not amount or amount <= 0 then
+        return self
+    end
+
+    local current = self:GetStatValue(stat_id)
+    return self:SetStatValue(stat_id, current + amount)
+end
+
+---
+--- Subtracts from the invested value of a specific statistic.
+---
+--- Prevents value from going below zero.
+---
+--- @param stat_id The statistic ID to decrement
+--- @param amount The amount to subtract
+--- @return self For method chaining
+---
+function Paragon:SubtractStatValue(stat_id, amount)
+    if not stat_id or not amount or amount <= 0 then
+        return self
+    end
+
+    local current = self:GetStatValue(stat_id)
+    local new_value = math.max(0, current - amount)
+
+    return self:SetStatValue(stat_id, new_value)
+end
+
+---
+--- Initializes a statistic (sets to 0 if not already set).
+---
+--- Used to prepare a statistic for investment.
+---
+--- @param stat_id The statistic ID to initialize
+--- @return self For method chaining
+---
+function Paragon:InitializeStatistic(stat_id)
+    if not stat_id then
+        return self
+    end
+
+    if self.statistics[stat_id] == nil then
+        self.statistics[stat_id] = 0
+    end
+
+    return self
+end
+
+---
+--- Resets all statistics to zero.
+---
+--- @return self For method chaining
+---
+function Paragon:ResetStatistics()
+    self.statistics = {}
+    RecalculateAvailablePoints(self)
+    return self
+end
+
+---
+--- Gets the total number of points invested across all statistics.
+---
+--- @return The sum of all invested points
+---
+function Paragon:GetUsedPoints()
+    local used = 0
+    for _, value in pairs(self.statistics) do
+        used = used + value
+    end
+
+    return used
+end
+
+---
+--- Gets the total points available at current level.
+---
+--- Total = level × POINTS_PER_LEVEL
+---
+--- @return The total points available for this level
+---
+function Paragon:GetTotalPointsAvailable()
+    local points_per_level = tonumber(Config:GetByField("POINTS_PER_LEVEL"))
+    return self.level * points_per_level
+end
+
+-- ============================================================================
+-- UTILITY METHODS
+-- ============================================================================
+
+---
+--- Gets the character's GUID associated with this paragon instance.
+---
+--- @return The character's GUID
+---
+function Paragon:GetGUID()
+    return self.guid
+end
+
+---
+--- Gets a summary of the current paragon state.
+---
+--- Useful for debugging and logging.
+---
+--- @return Table with level, exp_current, exp_max, points, used_points
+---
+function Paragon:GetState()
+    return {
+        guid = self.guid,
+        level = self.level,
+        experience = self.exp.current,
+        experience_max = self.exp.max,
+        available_points = self.points,
+        used_points = self:GetUsedPoints(),
+        statistics_count = self:GetStatisticsCount()
+    }
+end
+
+---
+--- Gets the number of statistics that have been invested in.
+---
+--- @return The count of non-zero statistics
+---
+function Paragon:GetStatisticsCount()
+    local count = 0
+    for _ in pairs(self.statistics) do
+        count = count + 1
+    end
+
+    return count
 end
 
 return Paragon

@@ -1,324 +1,820 @@
+--[[
+    Paragon Hook System
+
+    Manages all server-side event hooks and client-server communication for the
+    paragon system. Handles player login/logout, experience gains, and statistic
+    updates through event handlers and addon communication.
+
+    Responsibilities:
+    - Player login/logout lifecycle management
+    - Experience gain distribution from various sources
+    - Statistic point allocation and reallocation
+    - Client-server addon communication
+    - Event registration for ALE/Eluna
+
+    Architecture:
+    - Event-driven design with Mediator pattern
+    - Server events trigger paragon state updates
+    - Client packets processed through addon functions
+    - Statistics applied/removed atomically
+
+    @module paragon_hook
+    @author iThorgrim
+    @license AGL v3
+]]
+
 local Paragon = require("paragon_class")
 local Config = require("paragon_config")
 local Constant = require("paragon_constant")
+
+-- ============================================================================
+-- CONFIGURATION
+-- ============================================================================
 
 local Hook = {
     Addon = {
         Prefix = "ParagonAnniversary",
         Functions = {
-            [1] = "OnClientLoadRequest",
-            [2] = "OnClientSendStatistics"
+            [1] = "OnParagonClientLoadRequest",
+            [2] = "OnParagonClientSendStatistics"
         }
     }
 }
 
--- =================== Local Functions ===================
---- Retrieves a player object if it exists
--- @param guid_low The low part of the player's GUID
--- @return The player object or false if not found
+-- Experience source type enumeration
+local EXPERIENCE_SOURCE = {
+    CREATURE = 1,
+    ACHIEVEMENT = 2,
+    SKILL = 3,
+    QUEST = 4
+}
+
+-- ============================================================================
+-- PRIVATE FUNCTIONS
+-- ============================================================================
+
+---
+--- Retrieves a player object from their GUID low value.
+---
+--- @param guid_low The low part of the player's GUID
+--- @return The player object, or false if not found
+---
 local function GetPlayerIfExist(guid_low)
     local guid = GetPlayerGUID(guid_low)
-    if not guid then return false end
+    if not guid then
+        return false
+    end
 
     local player = GetPlayerByGUID(guid)
-    if not player then return false end
+    if not player then
+        return false
+    end
 
     return player
 end
 
---- Updates player statistics modifiers based on paragon data
--- Applies or removes stat bonuses to the player's character
--- @param player The player object to update
--- @param paragon The paragon instance containing stat data
--- @param apply Boolean indicating whether to apply (true) or remove (false) the bonuses
+---
+--- Applies or removes all paragon statistic modifiers to a player.
+---
+--- Iterates through all invested statistics and applies/removes bonuses based on
+--- the statistic type (UNIT_MODS, COMBAT_RATING, or AURA).
+---
+--- Mediator Events:
+--- - OnBeforeUpdatePlayerStatistics: (player, paragon, apply) - allows modification before applying
+--- - OnAfterUpdatePlayerStatistics: (player, paragon, apply) - allows cleanup after applying
+---
+--- @param player The player object to update
+--- @param paragon The paragon instance containing stat data
+--- @param apply Boolean indicating whether to apply (true) or remove (false) the bonuses
+---
 local function UpdatePlayerStatistics(player, paragon, apply)
-    if (not apply) then apply = false end
+    if not apply then
+        apply = false
+    end
+
+    -- Allow modules to hook before statistics are applied/removed
+    player, paragon, apply = Mediator.On("OnBeforeUpdatePlayerStatistics", {
+        arguments = { player, paragon, apply },
+        defaults = { player, paragon, apply },
+    })
 
     local statistics = paragon:GetStatistics()
+    if not statistics then
+        return
+    end
 
     for stat_id, stat_value in pairs(statistics) do
-        local stat_data = Config:GetByStatId(stat_id)
-        local constant_stat_type = Constant.STATISTICS[stat_data.type]
+        if not stat_value or stat_value <= 0 then
+            goto continue
+        end
 
-        if (stat_data and constant_stat_type) then
-            if (stat_data.type == "UNIT_MODS") then
-                player:HandleStatModifier(constant_stat_type[stat_data.value], stat_data.application, stat_value, apply)
+        local stat_data = Config:GetByStatId(stat_id)
+        if not stat_data then
+            goto continue
+        end
+
+        local constant_stat_type = Constant.STATISTICS[stat_data.type]
+        if not constant_stat_type then
+            goto continue
+        end
+
+        -- Apply bonus based on statistic type
+        if stat_data.type == "UNIT_MODS" then
+            player:HandleStatModifier(constant_stat_type[stat_data.value], stat_data.application, stat_value, apply)
+        elseif stat_data.type == "COMBAT_RATING" then
+            player:ApplyRatingMod(constant_stat_type[stat_data.value], stat_value, apply)
+        elseif stat_data.type == "AURA" then
+            if apply then
+                for _ = 1, stat_value do
+                    player:AddAura(constant_stat_type[stat_data.value], player)
+                end
+            else
+                player:RemoveAura(constant_stat_type[stat_data.value])
             end
         end
+
+        ::continue::
     end
+
+    -- Allow modules to hook after statistics are applied/removed
+    Mediator.On("OnAfterUpdatePlayerStatistics", {
+        arguments = { player, paragon, apply },
+    })
 end
 
---- Updates player paragon experience based on source activity
--- Applies experience rewards and handles level ups when experience threshold is reached
--- @param player The player object
--- @param paragon The paragon instance to update
--- @param source_type The source type (1=creature, 2=achievement, 3=skill, 4=quest)
--- @param entry The source entry ID (creature ID, achievement ID, skill ID, or quest ID)
+-- ============================================================================
+-- PLAYER EXPERIENCE MANAGEMENT
+-- ============================================================================
+
+---
+--- Updates player paragon experience based on activity source.
+---
+--- Calculates experience reward for the given source type and entry, then
+--- processes experience gain through the Mediator system which handles
+--- level-ups and point allocation.
+---
+--- Mediator Events:
+--- - OnBeforeUpdatePlayerExperience: (player, paragon, source_type, entry) - allows modification before award
+--- - OnExperienceCalculated: (player, paragon, source_type, specific_experience) - after calculation
+--- - OnUpdatePlayerExperience: (player, paragon, specific_experience) - delegates level-up handling
+--- - OnAfterUpdatePlayerExperience: (player, paragon) - cleanup after processing
+--- - OnParagonStateSync: (player, paragon) - allows custom sync logic before sending to client
+---
+--- @param player The player object
+--- @param paragon The paragon instance to update
+--- @param source_type The source type (EXPERIENCE_SOURCE enum)
+--- @param entry The source entry ID (creature ID, achievement ID, skill ID, or quest ID)
+--- @return boolean True if experience was awarded, false otherwise
+---
 local function UpdatePlayerExperience(player, paragon, source_type, entry)
-    local switch_universal_key = {
-        [1] = "UNIVERSAL_CREATURE_EXPERIENCE",
-        [2] = "UNIVERSAL_ACHIEVEVEMENT_EXPERIENCE",
-        [3] = "UNIVERSAL_SKILL_EXPERIENCE",
-        [4] = "UNIVERSAL_QUEST_EXPERIENCE"
+    if not player or not paragon or not source_type or not entry then
+        return false
+    end
+
+    paragon, source_type, entry = Mediator.On("OnBeforeUpdatePlayerExperience", {
+        arguments = { player, paragon, source_type, entry },
+        defaults = { paragon, source_type, entry },
+    })
+
+    -- Map source type to config key
+    local source_config_map = {
+        [EXPERIENCE_SOURCE.CREATURE] = "UNIVERSAL_CREATURE_EXPERIENCE",
+        [EXPERIENCE_SOURCE.ACHIEVEMENT] = "UNIVERSAL_ACHIEVEVEMENT_EXPERIENCE",
+        [EXPERIENCE_SOURCE.SKILL] = "UNIVERSAL_SKILL_EXPERIENCE",
+        [EXPERIENCE_SOURCE.QUEST] = "UNIVERSAL_QUEST_EXPERIENCE"
     }
 
-    local config_key = switch_universal_key[source_type] or "UNIVERSAL_CREATURE_EXPERIENCE"
+    local config_key = source_config_map[source_type] or "UNIVERSAL_CREATURE_EXPERIENCE"
     local universal_value = Config:GetByField(config_key)
 
-    if (not universal_value) then return false end
+    if not universal_value then
+        return false
+    end
 
-    local switch_specific_value = {
+    -- Get source-specific experience value (falls back to universal value)
+    local source_experience_map = {
         ["UNIVERSAL_CREATURE_EXPERIENCE"] = Config:GetCreatureExperience(entry),
         ["UNIVERSAL_ACHIEVEVEMENT_EXPERIENCE"] = Config:GetAchievementExperience(entry),
         ["UNIVERSAL_SKILL_EXPERIENCE"] = Config:GetSkillExperience(entry),
         ["UNIVERSAL_QUEST_EXPERIENCE"] = Config:GetQuestExperience(entry)
     }
 
-    local specific_experience = switch_specific_value[config_key] or universal_value
-    if (not specific_experience) then return false end
-
-    local paragon_experience = paragon:GetExperience()
-    local paragon_max_experience = paragon:GetExperienceForNextLevel()
-
-    if (paragon_experience + specific_experience > paragon_max_experience) then
-        paragon:AddLevel(1)
-        paragon:SetExperience((paragon_experience + specific_experience) - paragon_max_experience)
-        player:SendServerResponse(Hook.Addon.Prefix, 1, paragon:GetLevel())
-        player:SendServerResponse(Hook.Addon.Prefix, 4, paragon:GetPoints())
-    elseif (paragon_experience + specific_experience == paragon_max_experience) then
-        paragon:AddLevel(1)
-        paragon:SetExperience(0)
-        player:SendServerResponse(Hook.Addon.Prefix, 1, paragon:GetLevel())
-        player:SendServerResponse(Hook.Addon.Prefix, 4, paragon:GetPoints())
-    else
-        paragon:AddExperience(specific_experience)
-    end
-
-    player:SetData("Paragon", paragon)
-    player:SendServerResponse(Hook.Addon.Prefix, 2, paragon:GetExperience(), paragon:GetExperienceForNextLevel())
-end
-
---- Handles client request to load paragon data
--- Sends the player's paragon level and experience information to the client addon
--- @param player The player object making the request
--- @param _ Unused parameter
-function OnClientLoadRequest(player, _)
-    local paragon = player:GetData("Paragon")
-    if (not paragon) then
-        Hook.OnPlayerLogin(3, player)
+    local specific_experience = source_experience_map[config_key] or universal_value
+    if not specific_experience then
         return false
     end
 
+    -- Allow modules to see the calculated experience before processing
+    specific_experience = Mediator.On("OnExperienceCalculated", {
+        arguments = { player, paragon, source_type, specific_experience },
+        defaults = { specific_experience },
+    })
+
+    -- Process experience gain through Mediator (triggers level-ups)
+    paragon = Mediator.On("OnUpdatePlayerExperience", {
+        arguments = { player, paragon, specific_experience },
+        defaults = { paragon }
+    })
+
+    -- Allow modules to customize how paragon state is synced to client
+    Mediator.On("OnParagonStateSync", {
+        arguments = { player, paragon },
+    })
+
+    -- Update client with new paragon state
     player:SendServerResponse(Hook.Addon.Prefix, 1, paragon:GetLevel())
     player:SendServerResponse(Hook.Addon.Prefix, 4, paragon:GetPoints())
     player:SendServerResponse(Hook.Addon.Prefix, 2, paragon:GetExperience(), paragon:GetExperienceForNextLevel())
 
-    local temp = Config:GetCategories()
-    for _, category_data in pairs(temp) do
-        local cat_stat = category_data.statistics
-        if (cat_stat) then
-            for stat_id, stat_data in pairs(cat_stat) do
+    player:SetData("Paragon", paragon)
+
+    Mediator.On("OnAfterUpdatePlayerExperience", {
+        arguments = { player, paragon },
+    })
+
+    return true
+end
+
+-- ============================================================================
+-- PLAYER POINTS MANAGEMENT
+-- ============================================================================
+
+---
+--- Updates a character's paragon statistic investment and available points.
+---
+--- Validates point availability and stat limits before applying changes.
+--- Recursively handles point reallocation if negative points result from change.
+---
+--- @param player The player object
+--- @param paragon The paragon instance to update
+--- @param stat_id The statistic ID to modify
+--- @param stat_value The new value to set for the statistic
+--- @return boolean True if points were updated, false otherwise
+---
+local function UpdateParagonPoints(player, paragon, stat_id, stat_value)
+    if not player or not paragon or not stat_id or not stat_value then
+        return false
+    end
+
+    paragon, stat_id, stat_value = Mediator.On("OnBeforeUpdateParagonPoints", {
+        arguments = { player, paragon, stat_id, stat_value },
+        defaults = { paragon, stat_id, stat_value },
+    })
+
+    local actual_stat_value = paragon:GetStatValue(stat_id)
+    local available_points = paragon:GetPoints()
+
+    -- Recalculate available points based on change in stat value
+    if actual_stat_value > stat_value then
+        available_points = available_points + (actual_stat_value - stat_value)
+    elseif actual_stat_value < stat_value then
+        available_points = available_points - (stat_value - actual_stat_value)
+    end
+
+    paragon, stat_id, actual_stat_value, available_points = Mediator.On("OnUpdateParagonPoints", {
+        arguments = { player, paragon, stat_id, actual_stat_value, available_points },
+        defaults = { paragon, stat_id, actual_stat_value, available_points },
+    })
+
+    -- If negative points, recursively deallocate and revert
+    if available_points < 0 then
+        UpdateParagonPoints(player, paragon, stat_id, actual_stat_value)
+        return false
+    end
+
+    -- Apply the stat change
+    paragon:SetPoints(available_points)
+    paragon:SetStatValue(stat_id, stat_value)
+
+    -- Send updated stat to client
+    player:SendServerResponse(Hook.Addon.Prefix, 5, {
+        id = stat_id,
+        value = stat_value,
+        category = Config:GetCategoryByStatId(stat_id)
+    })
+
+    Mediator.On("OnAfterUpdateParagonPoints", {
+        arguments = { player, paragon, stat_id, stat_value }
+    })
+
+    return true
+end
+
+-- ============================================================================
+-- ADDON COMMAND HANDLERS
+-- ============================================================================
+
+---
+--- Handles client request to load and display all paragon data.
+---
+--- Sends the player's level, experience, categories, and statistics to the
+--- client addon for UI display and interaction.
+---
+--- Mediator Events:
+--- - OnBeforeClientLoadRequest: (player, paragon) - allows modification before loading
+--- - OnAfterClientLoadRequest: (player, paragon, categories) - allows modification of sent data
+---
+--- @param player The player object making the request
+--- @param _ Unused parameter (always nil for addon requests)
+---
+function OnParagonClientLoadRequest(player, _)
+    if not player then
+        return false
+    end
+
+    local paragon = player:GetData("Paragon")
+    if not paragon then
+        Hook.OnPlayerLogin(3, player)
+        return false
+    end
+
+    -- Trigger Mediator event before loading
+    paragon = Mediator.On("OnBeforeClientLoadRequest", {
+        arguments = { player, paragon },
+        defaults = { paragon },
+    })
+
+    -- Build category/statistic data with player's current assignments
+    local categories = Config:GetCategories()
+    if not categories then
+        return false
+    end
+
+    for _, category_data in pairs(categories) do
+        local statistics = category_data.statistics
+        if statistics then
+            for stat_id, stat_data in pairs(statistics) do
                 stat_data.assigned = paragon:GetStatValue(stat_id)
             end
         end
     end
 
-    player:SendServerResponse(Hook.Addon.Prefix, 3, temp)
+    -- Allow modules to modify the data sent to client
+    categories = Mediator.On("OnAfterClientLoadRequest", {
+        arguments = { player, paragon, categories },
+        defaults = { categories },
+    })
+
+    -- Send complete paragon state to client
+    player:SendServerResponse(Hook.Addon.Prefix, 1, paragon:GetLevel())
+    player:SendServerResponse(Hook.Addon.Prefix, 2, paragon:GetExperience(), paragon:GetExperienceForNextLevel())
+    player:SendServerResponse(Hook.Addon.Prefix, 3, categories)
+    player:SendServerResponse(Hook.Addon.Prefix, 4, paragon:GetPoints())
+
+    return true
 end
 
---- Handles client request to update paragon statistics
--- Validates and applies updated statistic values from the client addon
--- @param player The player object making the request
--- @param arg_table Table containing the statistics data to update
-function OnClientSendStatistics(player, arg_table)
+---
+--- Handles client request to update paragon statistics.
+---
+--- Validates all statistic changes, recalculates available points, and
+--- updates statistic bonuses. Processes changes atomically to prevent
+--- invalid state transitions.
+---
+--- Mediator Events:
+--- - OnBeforeClientStatisticsUpdate: (player, paragon, data) - allows modification before processing
+--- - OnBeforeStatisticChange: (player, paragon, stat_id, value) - per-stat hook before validation
+--- - OnAfterStatisticChange: (player, paragon, stat_id, value) - per-stat hook after application
+--- - OnAfterClientStatisticsUpdate: (player, paragon) - allows cleanup after all updates
+---
+--- @param player The player object making the request
+--- @param arg_table Table containing {statistics_array} with categoryId, statId, and value
+--- @return boolean True if all updates succeeded, false if validation failed
+---
+function OnParagonClientSendStatistics(player, arg_table)
+    if not player or not arg_table then
+        return false
+    end
+
     local data = arg_table[1]
-    if (not data) then
-        -- Player attempted to send an empty packet
+    if not data then
         player:SendNotification("ERROR.")
         return false
     end
 
     local paragon = player:GetData("Paragon")
-    if (not paragon) then return false end
-
-    -- Remove statistics temporarily during processing
-    UpdatePlayerStatistics(player, paragon, false)
-
-    for _, updated_data in pairs(data) do
-        local category_id = updated_data.categoryId
-        if (not category_id) then return false end
-
-        local categories = Config:GetCategories()
-        local category_data = categories[category_id]
-        if (not category_data) then return false end
-
-        local statistic_id = updated_data.statId
-        if (not statistic_id) then return false end
-
-        local statistic_data = category_data.statistics[statistic_id]
-        if (not statistic_data) then return false end
-
-        local statistic_value = updated_data.value
-        if (not statistic_value or statistic_value < 0) then return false end
-
-        if (statistic_data.limit > 0 and statistic_value > statistic_data.limit) then return false end
-
-        -- TODO: Verify that the number of points spent matches available points
-        local available_points = paragon:GetPoints()
-        if (statistic_value > available_points) then return false end
-
-        paragon:SetStatValue(statistic_id, statistic_value)
-        paragon:SetPoints(available_points - statistic_value)
-    end
-
-    player:SetData("Paragon", paragon)
-    -- Reapply statistics after processing
-    UpdatePlayerStatistics(player, paragon, true)
-    player:SendServerResponse(Hook.Addon.Prefix, 4, paragon:GetPoints())
-end
-
---- Callback executed when player statistics data has been loaded from the database
--- @param guid_low The low part of the player's GUID
--- @param paragon The loaded paragon instance
-function Hook.OnPlayerStatLoad(guid_low, paragon)
-    local player = GetPlayerIfExist(guid_low)
-    if (not player) then
+    if not paragon then
         return false
     end
 
+    -- Trigger Mediator event before processing any statistics
+    paragon, data = Mediator.On("OnBeforeClientStatisticsUpdate", {
+        arguments = { player, paragon, data },
+        defaults = { paragon, data },
+    })
+
+    -- Temporarily remove all stat bonuses during processing
+    UpdatePlayerStatistics(player, paragon, false)
+
+    -- Process each statistic update
+    for _, updated_data in pairs(data) do
+        -- Validate category
+        local category_id = updated_data.categoryId
+        if not category_id then
+            UpdatePlayerStatistics(player, paragon, true)
+            return false
+        end
+
+        local categories = Config:GetCategories()
+        local category_data = categories[category_id]
+        if not category_data then
+            UpdatePlayerStatistics(player, paragon, true)
+            return false
+        end
+
+        -- Validate statistic
+        local statistic_id = updated_data.statId
+        if not statistic_id then
+            UpdatePlayerStatistics(player, paragon, true)
+            return false
+        end
+
+        local statistic_data = category_data.statistics[statistic_id]
+        if not statistic_data then
+            UpdatePlayerStatistics(player, paragon, true)
+            return false
+        end
+
+        -- Validate value and limit
+        local statistic_value = updated_data.value
+        if not statistic_value or statistic_value < 0 then
+            UpdatePlayerStatistics(player, paragon, true)
+            return false
+        end
+
+        if statistic_data.limit > 0 and statistic_value > statistic_data.limit then
+            UpdatePlayerStatistics(player, paragon, true)
+            return false
+        end
+
+        -- Allow modules to intercept before stat change (for additional validation/modification)
+        paragon, statistic_id, statistic_value = Mediator.On("OnBeforeStatisticChange", {
+            arguments = { player, paragon, statistic_id, statistic_value },
+            defaults = { paragon, statistic_id, statistic_value },
+        })
+
+        -- Apply the stat change
+        UpdateParagonPoints(player, paragon, statistic_id, statistic_value)
+
+        -- Allow modules to hook after stat change (for side effects, logging, etc.)
+        Mediator.On("OnAfterStatisticChange", {
+            arguments = { player, paragon, statistic_id, statistic_value },
+        })
+    end
+
     player:SetData("Paragon", paragon)
 
+    -- Reapply all stat bonuses after processing
+    UpdatePlayerStatistics(player, paragon, true)
+    player:SendServerResponse(Hook.Addon.Prefix, 4, paragon:GetPoints())
+
+    -- Trigger Mediator event after all statistics have been updated
+    Mediator.On("OnAfterClientStatisticsUpdate", {
+        arguments = { player, paragon },
+    })
+
+    return true
+end
+
+-- ============================================================================
+-- PLAYER LIFECYCLE MANAGEMENT
+-- ============================================================================
+
+---
+--- Callback executed after paragon data has been loaded from the database.
+---
+--- Applies all stat bonuses and syncs UI with loaded paragon state.
+---
+--- @param guid_low The low part of the player's GUID
+--- @param paragon The loaded paragon instance
+--- @return boolean True if successful, false if player not found
+---
+function Hook.OnPlayerStatLoad(guid_low, paragon)
+    if not guid_low or not paragon then
+        return false
+    end
+
+    local player = GetPlayerIfExist(guid_low)
+    if not player then
+        return false
+    end
+
+    -- Trigger Mediator event for post-load processing
+    paragon = Mediator.On("OnPlayerStatLoad", {
+        arguments = { player, paragon },
+        defaults = { paragon }
+    })
+
+    player:SetData("Paragon", paragon)
+
+    -- Apply all loaded statistics bonuses to the character
     UpdatePlayerStatistics(player, paragon, true)
 
-    -- Final step, update the UI
-    OnClientLoadRequest(player)
+    -- Sync UI with loaded paragon state
+    OnParagonClientLoadRequest(player)
+
+    return true
 end
 
---- Event handler triggered when a player logs into the server
--- Creates a new paragon instance and loads data from the database
--- @param event The event ID (3 = PLAYER_EVENT_ON_LOGIN)
--- @param player The player object that logged in
+---
+--- Handles player login event.
+---
+--- Creates new paragon instance and asynchronously loads character-specific
+--- data from the database. Handles player initialization on first login.
+---
+--- @param event The event ID (3 = PLAYER_EVENT_ON_LOGIN)
+--- @param player The player object that logged in
+--- @return boolean Always returns nil for event handlers
+---
 function Hook.OnPlayerLogin(event, player)
+    if not player then
+        return
+    end
+
+    -- Create new paragon instance for this character
     local paragon = Paragon(player:GetGUIDLow())
-    paragon:Load(Hook.OnPlayerStatLoad)
 
+    -- Trigger Mediator event before loading
+    paragon, callback = Mediator.On("OnBeforePlayerStatLoad", {
+        arguments = { player, paragon },
+        defaults = { paragon, Hook.OnPlayerStatLoad }
+    })
+
+    -- Asynchronously load paragon data from database
+    paragon:Load(callback)
+
+    Mediator.On("OnAfterPlayerStatLoad", {
+        arguments = { player, paragon },
+    })
 end
 
---- Event handler triggered when a player logs out of the server
--- Removes stat bonuses and saves paragon progress to the database
--- @param event The event ID (4 = PLAYER_EVENT_ON_LOGOUT)
--- @param player The player object that logged out
+---
+--- Handles player logout event.
+---
+--- Removes all stat bonuses and saves paragon progress to the database.
+--- Called when a player disconnects or logs out.
+---
+--- @param event The event ID (4 = PLAYER_EVENT_ON_LOGOUT)
+--- @param player The player object that logged out
+--- @return boolean Always returns nil for event handlers
+---
 function Hook.OnPlayerLogout(event, player)
-    local paragon = player:GetData("Paragon")
-    if (not paragon) then return end
+    if not player then
+        return
+    end
 
+    local paragon = player:GetData("Paragon")
+    if not paragon then
+        return
+    end
+
+    -- Trigger Mediator event before saving
+    paragon = Mediator.On("OnBeforePlayerStatSave", {
+        arguments = { player, paragon },
+        defaults = { paragon }
+    })
+
+    -- Remove all stat bonuses from character
     UpdatePlayerStatistics(player, paragon, false)
+
+    -- Save paragon progress to database
     paragon:Save()
+
+    Mediator.On("OnAfterPlayerStatSave", {
+        arguments = { player, paragon },
+    })
 end
 
---- Event handler triggered when a player kills a creature
--- Awards paragon experience based on creature entry configuration
--- @param event The event ID (7 = PLAYER_EVENT_ON_KILL_CREATURE)
--- @param player The player object that killed the creature
--- @param creature The creature object that was killed
+-- ============================================================================
+-- PLAYER EXPERIENCE EVENTS
+-- ============================================================================
+
+---
+--- Handles creature kill event.
+---
+--- Awards paragon experience when a player kills a creature that has been
+--- configured with experience rewards.
+---
+--- Mediator Events:
+--- - OnBeforeCreatureExperience: (player, creature, paragon) - allows modification before award
+---
+--- @param event The event ID (7 = PLAYER_EVENT_ON_KILL_CREATURE)
+--- @param player The player object that killed the creature
+--- @param creature The creature object that was killed
+---
 function Hook.OnPlayerKillCreature(event, player, creature)
-    local paragon = player:GetData("Paragon")
-    if (not paragon) then return end
+    if not player or not creature then
+        return
+    end
 
-    UpdatePlayerExperience(player, paragon, 1, creature:GetEntry())
+    local paragon = player:GetData("Paragon")
+    if not paragon then
+        return
+    end
+
+    -- Allow modules to intercept creature experience gain
+    paragon = Mediator.On("OnBeforeCreatureExperience", {
+        arguments = { player, creature, paragon },
+        defaults = { paragon },
+    })
+
+    UpdatePlayerExperience(player, paragon, EXPERIENCE_SOURCE.CREATURE, creature:GetEntry())
 end
 
---- Event handler triggered when a player completes an achievement
--- Awards paragon experience based on achievement configuration
--- @param event The event ID (45 = PLAYER_EVENT_ON_ACHIEVEMENT_COMPLETE)
--- @param player The player object that completed the achievement
--- @param achievement The achievement object that was completed
+---
+--- Handles achievement complete event.
+---
+--- Awards paragon experience when a player completes an achievement that has
+--- been configured with experience rewards.
+---
+--- Mediator Events:
+--- - OnBeforeAchievementExperience: (player, achievement, paragon) - allows modification before award
+---
+--- @param event The event ID (45 = PLAYER_EVENT_ON_ACHIEVEMENT_COMPLETE)
+--- @param player The player object that completed the achievement
+--- @param achievement The achievement object that was completed
+---
 function Hook.OnPlayerAchievementComplete(event, player, achievement)
-    local paragon = player:GetData("Paragon")
-    if (not paragon) then return end
+    if not player or not achievement then
+        return
+    end
 
-    UpdatePlayerExperience(player, paragon, 2, achievement:GetId())
+    local paragon = player:GetData("Paragon")
+    if not paragon then
+        return
+    end
+
+    -- Allow modules to intercept achievement experience gain
+    paragon = Mediator.On("OnBeforeAchievementExperience", {
+        arguments = { player, achievement, paragon },
+        defaults = { paragon },
+    })
+
+    UpdatePlayerExperience(player, paragon, EXPERIENCE_SOURCE.ACHIEVEMENT, achievement:GetId())
 end
 
---- Event handler triggered when a player completes a quest
--- Awards paragon experience based on quest configuration
--- @param event The event ID (54 = PLAYER_EVENT_ON_QUEST_COMPLETE)
--- @param player The player object that completed the quest
--- @param quest The quest object that was completed
+---
+--- Handles quest complete event.
+---
+--- Awards paragon experience when a player completes a quest that has been
+--- configured with experience rewards.
+---
+--- Mediator Events:
+--- - OnBeforeQuestExperience: (player, quest, paragon) - allows modification before award
+---
+--- @param event The event ID (54 = PLAYER_EVENT_ON_QUEST_COMPLETE)
+--- @param player The player object that completed the quest
+--- @param quest The quest object that was completed
+---
 function Hook.OnPlayerQuestComplete(event, player, quest)
-    local paragon = player:GetData("Paragon")
-    if (not paragon) then return end
+    if not player or not quest then
+        return
+    end
 
-    UpdatePlayerExperience(player, paragon, 4, quest:GetId())
+    local paragon = player:GetData("Paragon")
+    if not paragon then
+        return
+    end
+
+    -- Allow modules to intercept quest experience gain
+    paragon = Mediator.On("OnBeforeQuestExperience", {
+        arguments = { player, quest, paragon },
+        defaults = { paragon },
+    })
+
+    UpdatePlayerExperience(player, paragon, EXPERIENCE_SOURCE.QUEST, quest:GetId())
 end
 
---- Event handler triggered when a player increases a skill
--- Awards paragon experience based on skill configuration
--- @param event The event ID (62 = PLAYER_EVENT_ON_SKILL_UPDATE)
--- @param player The player object whose skill was updated
--- @param skill_id The skill ID that was updated
--- @param value Current skill value (unused)
--- @param max Maximum skill value (unused)
--- @param step Skill step increase (unused)
--- @param new_value New skill value (unused)
+---
+--- Handles skill update event.
+---
+--- Awards paragon experience when a player increases a skill that has been
+--- configured with experience rewards.
+---
+--- Mediator Events:
+--- - OnBeforeSkillExperience: (player, skill_id, paragon) - allows modification before award
+---
+--- @param event The event ID (62 = PLAYER_EVENT_ON_SKILL_UPDATE)
+--- @param player The player object whose skill was updated
+--- @param skill_id The skill ID that was updated
+--- @param value Current skill value (unused)
+--- @param max Maximum skill value (unused)
+--- @param step Skill step increase (unused)
+--- @param new_value New skill value (unused)
+---
 function Hook.OnPlayerSkillUpdate(event, player, skill_id, value, max, step, new_value)
-    local paragon = player:GetData("Paragon")
-    if (not paragon) then return end
+    if not player or not skill_id then
+        return
+    end
 
-    UpdatePlayerExperience(player, paragon, 3, skill_id)
+    local paragon = player:GetData("Paragon")
+    if not paragon then
+        return
+    end
+
+    -- Allow modules to intercept skill experience gain
+    paragon = Mediator.On("OnBeforeSkillExperience", {
+        arguments = { player, skill_id, paragon },
+        defaults = { paragon },
+    })
+
+    UpdatePlayerExperience(player, paragon, EXPERIENCE_SOURCE.SKILL, skill_id)
 end
 
---- Event handler triggered when the Lua state (world) is opened
--- Reloads paragon data for all players currently in the world
--- @param event The event ID (33 = SERVER_EVENT_ON_LUA_STATE_OPEN)
+-- ============================================================================
+-- SERVER EVENTS
+-- ============================================================================
+
+---
+--- Handles Lua state open event.
+---
+--- Called when the server is initialized or Lua scripts are reloaded.
+--- Reloads paragon data for all players currently in the world.
+---
+--- @param event The event ID (33 = SERVER_EVENT_ON_LUA_STATE_OPEN)
+---
 function Hook.OnLuaStateOpen(event)
-    for _, player in pairs(GetPlayersInWorld()) do
+    local players = GetPlayersInWorld()
+    if not players then
+        return
+    end
+
+    for _, player in pairs(players) do
         Hook.OnPlayerLogin(3, player)
     end
 end
 
---- Event handler triggered when the Lua state (world) is closed
--- Saves paragon data for all players currently in the world
--- @param event The event ID (16 = SERVER_EVENT_ON_LUA_STATE_CLOSE)
+---
+--- Handles Lua state close event.
+---
+--- Called when the Lua scripts are being unloaded or the server is shutting down.
+--- Saves paragon data for all players currently in the world.
+---
+--- @param event The event ID (16 = SERVER_EVENT_ON_LUA_STATE_CLOSE)
+---
 function Hook.OnLuaStateClose(event)
-    for _, player in pairs(GetPlayersInWorld()) do
+    local players = GetPlayersInWorld()
+    if not players then
+        return
+    end
+
+    for _, player in pairs(players) do
         Hook.OnPlayerLogout(4, player)
     end
 end
 
---- Event handler triggered when a player enters a command
--- Handles test command for paragon system debugging
--- @param event The event ID (42 = PLAYER_EVENT_ON_COMMAND)
--- @param player The player object executing the command
--- @param command The command string entered by the player
+---
+--- Handles player command event.
+---
+--- Currently supports a "test" command for debugging paragon system functionality.
+--- Can be extended to support additional admin commands.
+---
+--- @param event The event ID (42 = PLAYER_EVENT_ON_COMMAND)
+--- @param player The player object executing the command
+--- @param command The command string entered by the player (without leading slash)
+--- @return boolean False to allow other command handlers to process the command
+---
 function Hook.OnPlayerCommand(event, player, command)
-    if (command == "test") then
+    if not player or not command then
+        return
+    end
+
+    if command == "test" then
         local paragon = player:GetData("Paragon")
+        if not paragon then
+            return false
+        end
+
+        -- Remove existing bonuses
         UpdatePlayerStatistics(player, paragon, false)
 
+        -- Add test stat value
         paragon:AddStatValue(1, 150)
         player:SetData("Paragon", paragon)
 
-        local constant_stat_type = Constant.STATISTICS["UNIT_MODS"]
+        -- Reapply bonuses
         UpdatePlayerStatistics(player, paragon, true)
+
         return false
     end
 end
-RegisterPlayerEvent(42, Hook.OnPlayerCommand)
 
--- ================= REGISTER ALE/ELUNA EVENT =================
+-- ============================================================================
+-- EVENT REGISTRATION
+-- ============================================================================
 
 -- Player Events
 RegisterPlayerEvent(3, Hook.OnPlayerLogin)
 RegisterPlayerEvent(4, Hook.OnPlayerLogout)
 RegisterPlayerEvent(7, Hook.OnPlayerKillCreature)
+RegisterPlayerEvent(42, Hook.OnPlayerCommand)
 RegisterPlayerEvent(45, Hook.OnPlayerAchievementComplete)
 RegisterPlayerEvent(54, Hook.OnPlayerQuestComplete)
 RegisterPlayerEvent(62, Hook.OnPlayerSkillUpdate)
 
 -- Server Events
-RegisterServerEvent(33, Hook.OnLuaStateOpen)
 RegisterServerEvent(16, Hook.OnLuaStateClose)
+RegisterServerEvent(33, Hook.OnLuaStateOpen)
 
--- CSMH Events
+-- Addon Communication Events
 RegisterClientRequests(Hook.Addon)
