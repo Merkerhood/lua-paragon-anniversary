@@ -44,13 +44,16 @@ end
 ---
 --- Executes database schema migrations on initialization.
 ---
---- Creates all necessary tables and triggers if they don't already exist:
+--- Creates all necessary tables, triggers, and default configuration:
 --- 1. paragon_config_category: Category definitions
 --- 2. paragon_config_statistic: Stat configs with properties
 --- 3. paragon_config: General key-value settings
---- 4. character_paragon: Character level/experience
---- 5. character_paragon_stats: Character stat investments
---- 6. Triggers: Validation for config stat insertions/updates
+--- 4. paragon_config_experience_*: Experience reward overrides
+--- 5. character_paragon: Character level/experience (character-linked paragon)
+--- 6. account_paragon: Account-wide level/experience (account-linked paragon)
+--- 7. character_paragon_stats: Character stat investments
+--- 8. Triggers: Validation for config stat insertions/updates
+--- 9. Default Configuration: Initial system settings
 ---
 function Repository:ExecuteMigration()
     -- Configuration tables
@@ -58,13 +61,23 @@ function Repository:ExecuteMigration()
     CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_STAT, Constants.DB_NAME, Constants.DB_NAME))
     CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG, Constants.DB_NAME))
 
-    -- Character paragon tables
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_PARA, Constants.DB_NAME))
+    -- Experience reward configuration tables
+    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_EXP_CREATURE, Constants.DB_NAME))
+    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_EXP_ACHIEVEMENT, Constants.DB_NAME))
+    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_EXP_SKILL, Constants.DB_NAME))
+    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_EXP_QUEST, Constants.DB_NAME))
+
+    -- Paragon progression tables (both always created, system uses correct one based on config)
+    CharDBExecute(sf(Constants.QUERY.CR_TABLE_PARA_CHARACTER, Constants.DB_NAME))
+    CharDBExecute(sf(Constants.QUERY.CR_TABLE_PARA_ACCOUNT, Constants.DB_NAME))
     CharDBExecute(sf(Constants.QUERY.CR_TABLE_PARA_STAT, Constants.DB_NAME))
 
     -- Validation triggers
     CharDBExecute(sf(Constants.QUERY.CT_TRIGGER_BU_CONFIG_STAT, Constants.DB_NAME, Constants.DB_NAME))
     CharDBExecute(sf(Constants.QUERY.CT_TRIGGER_BI_CONFIG_STAT, Constants.DB_NAME, Constants.DB_NAME))
+
+    -- Insert default configuration settings (only if not already present)
+    CharDBExecute(sf(Constants.QUERY.INS_DEFAULT_CONFIG, Constants.DB_NAME))
 end
 
 -- ============================================================================
@@ -228,8 +241,9 @@ end
 -- ============================================================================
 
 ---
---- Asynchronously retrieves paragon level and experience data for a character.
+--- Asynchronously retrieves paragon level and experience data for a character by GUID.
 ---
+--- Queries character_paragon table for character-linked paragon progression.
 --- Non-blocking query - uses callback to return results.
 ---
 --- @param guid The character's GUID
@@ -240,7 +254,34 @@ function Repository:GetParagonByCharacter(guid, callback)
         return
     end
 
-    CharDBQueryAsync(sf(Constants.QUERY.SEL_PARA, Constants.DB_NAME, guid), function(results)
+    CharDBQueryAsync(sf(Constants.QUERY.SEL_PARA_CHARACTER, Constants.DB_NAME, guid), function(results)
+        local data = {}
+        if results then
+            repeat
+                data.level = results:GetUInt32(0)
+                data.current_experience = results:GetUInt32(1)
+            until not results:NextRow()
+        end
+
+        callback(data)
+    end)
+end
+
+---
+--- Asynchronously retrieves paragon level and experience data for an account.
+---
+--- Queries account_paragon table for account-linked paragon progression.
+--- Non-blocking query - uses callback to return results.
+---
+--- @param account_id The account ID
+--- @param callback Function to invoke with {level, current_experience}
+---
+function Repository:GetParagonByAccountId(account_id, callback)
+    if not account_id or not callback then
+        return
+    end
+
+    CharDBQueryAsync(sf(Constants.QUERY.SEL_PARA_ACCOUNT, Constants.DB_NAME, account_id), function(results)
         local data = {}
         if results then
             repeat
@@ -298,6 +339,62 @@ function Repository:SaveParagonCharacterStat(guid, statistics)
     for stat_id, stat_value in pairs(statistics) do
         CharDBExecute(sf(Constants.QUERY.INS_PARA_STAT, Constants.DB_NAME, guid, stat_id, stat_value))
     end
+end
+
+---
+--- Saves character paragon level and experience to the character_paragon table.
+---
+--- Persists character-specific paragon progression using character GUID.
+--- Uses INSERT...ON DUPLICATE KEY UPDATE for idempotent updates.
+---
+--- @param guid The character's GUID
+--- @param level The paragon level to save
+--- @param experience The current experience to save
+---
+function Repository:SaveParagonByCharacter(guid, level, experience)
+    if not guid or not level then
+        return
+    end
+
+    CharDBExecute(sf(Constants.QUERY.INS_PARA_CHARACTER, Constants.DB_NAME, guid, level, experience or 0))
+end
+
+---
+--- Saves account paragon level and experience to the account_paragon table.
+---
+--- Persists account-wide paragon progression using account ID.
+--- Uses INSERT...ON DUPLICATE KEY UPDATE for idempotent updates.
+---
+--- @param account_id The account ID
+--- @param level The paragon level to save
+--- @param experience The current experience to save
+---
+function Repository:SaveParagonByAccount(account_id, level, experience)
+    if not account_id or not level then
+        return
+    end
+
+    CharDBExecute(sf(Constants.QUERY.INS_PARA_ACCOUNT, Constants.DB_NAME, account_id, level, experience or 0))
+end
+
+---
+--- Deletes all paragon data for a character.
+---
+--- Removes both character paragon progression and all invested statistics.
+--- Called when a character is deleted from the account.
+---
+--- Only executes if LEVEL_LINKED_TO_ACCOUNT is disabled (character-level paragon).
+--- When account-linked paragon is enabled, data is preserved across character deletion.
+---
+--- @param guid The character's GUID (used if character-linked)
+---
+function Repository:DeleteParagonData(guid)
+    if not guid then
+        return
+    end
+
+    CharDBExecute(sf(Constants.QUERY.DEL_PARA_CHARACTER, Constants.DB_NAME, guid))
+    CharDBExecute(sf(Constants.QUERY.DEL_PARA_STAT, Constants.DB_NAME, guid))
 end
 
 -- ============================================================================

@@ -156,22 +156,22 @@ return {
 
         --- General Configuration Table
         -- Stores key-value pairs for general paragon settings
+        -- Uses field as primary key for efficient lookups and prevents duplicate keys
         CR_TABLE_CONFIG = [[
             CREATE TABLE IF NOT EXISTS `%s`.`paragon_config` (
-                `id` INT NOT NULL AUTO_INCREMENT,
                 `field` VARCHAR(255) NOT NULL,
                 `value` VARCHAR(255) NOT NULL,
 
-                PRIMARY KEY (`id`)
+                PRIMARY KEY (`field`)
             );
         ]],
 
         -- Select all configuration settings
         SEL_CONFIG = "SELECT `field`, `value` FROM `%s`.`paragon_config`;",
 
-        --- Character Paragon Table
-        -- Stores each character's paragon level and experience
-        CR_TABLE_PARA = [[
+        --- Character Paragon Table (Character-Linked)
+        -- Stores each character's paragon level and experience when LEVEL_LINKED_TO_ACCOUNT = 0
+        CR_TABLE_PARA_CHARACTER = [[
             CREATE TABLE IF NOT EXISTS `%s`.`character_paragon` (
                 `guid` INT(11) NOT NULL,
                 `level` INT(11) NOT NULL DEFAULT 1,
@@ -181,8 +181,35 @@ return {
             );
         ]],
 
-        -- Select paragon level and experience for a character
-        SEL_PARA = "SELECT level, experience FROM `%s`.`character_paragon` WHERE guid = %d;",
+        --- Account Paragon Table (Account-Linked)
+        -- Stores account-wide paragon level and experience when LEVEL_LINKED_TO_ACCOUNT = 1
+        CR_TABLE_PARA_ACCOUNT = [[
+            CREATE TABLE IF NOT EXISTS `%s`.`account_paragon` (
+                `account_id` INT(11) NOT NULL,
+                `level` INT(11) NOT NULL DEFAULT 1,
+                `experience` INT(11) NOT NULL DEFAULT 0,
+
+                PRIMARY KEY (`account_id`)
+            );
+        ]],
+
+        -- Select paragon level and experience for a character (character-linked)
+        SEL_PARA_CHARACTER = "SELECT level, experience FROM `%s`.`character_paragon` WHERE guid = %d;",
+
+        -- Select paragon level and experience for an account (account-linked)
+        SEL_PARA_ACCOUNT = "SELECT level, experience FROM `%s`.`account_paragon` WHERE account_id = %d;",
+
+        -- Insert new character paragon record (character-linked)
+        INS_PARA_CHARACTER = "INSERT INTO `%s`.`character_paragon` (guid, level, experience) VALUES (%d, %d, %d) ON DUPLICATE KEY UPDATE level = VALUES(level), experience = VALUES(experience);",
+
+        -- Insert new account paragon record (account-linked)
+        INS_PARA_ACCOUNT = "INSERT INTO `%s`.`account_paragon` (account_id, level, experience) VALUES (%d, %d, %d) ON DUPLICATE KEY UPDATE level = VALUES(level), experience = VALUES(experience);",
+
+        -- Delete character paragon record
+        DEL_PARA_CHARACTER = "DELETE FROM `%s`.`character_paragon` WHERE guid = %d;",
+
+        -- Delete account paragon record
+        DEL_PARA_ACCOUNT = "DELETE FROM `%s`.`account_paragon` WHERE account_id = %d;",
 
         --- Character Paragon Statistics Table
         -- Stores stat points invested by each character
@@ -201,12 +228,92 @@ return {
 
         INS_PARA_STAT = "INSERT INTO `%s`.`character_paragon_stats` (guid, stat_id, stat_value) VALUES (%d, %d, %d) ON DUPLICATE KEY UPDATE stat_value = VALUES(stat_value);",
 
+        -- Delete all statistics for a character
+        DEL_PARA_STAT = "DELETE FROM `%s`.`character_paragon_stats` WHERE guid = %d;",
 
-        --
+        --- Experience Reward Configuration Tables
+        -- Stores experience rewards for specific sources
+        -- Entry IDs from: creatures, achievements, skills, quests
+        CR_TABLE_CONFIG_EXP_CREATURE = [[
+            CREATE TABLE IF NOT EXISTS `%s`.`paragon_config_experience_creature` (
+                `id` INT(11) NOT NULL,
+                `experience` INT(11) NOT NULL DEFAULT 50,
+
+                PRIMARY KEY (`id`)
+            );
+        ]],
+
+        CR_TABLE_CONFIG_EXP_ACHIEVEMENT = [[
+            CREATE TABLE IF NOT EXISTS `%s`.`paragon_config_experience_achievement` (
+                `id` INT(11) NOT NULL,
+                `experience` INT(11) NOT NULL DEFAULT 100,
+
+                PRIMARY KEY (`id`)
+            );
+        ]],
+
+        CR_TABLE_CONFIG_EXP_SKILL = [[
+            CREATE TABLE IF NOT EXISTS `%s`.`paragon_config_experience_skill` (
+                `id` INT(11) NOT NULL,
+                `experience` INT(11) NOT NULL DEFAULT 25,
+
+                PRIMARY KEY (`id`)
+            );
+        ]],
+
+        CR_TABLE_CONFIG_EXP_QUEST = [[
+            CREATE TABLE IF NOT EXISTS `%s`.`paragon_config_experience_quest` (
+                `id` INT(11) NOT NULL,
+                `experience` INT(11) NOT NULL DEFAULT 75,
+
+                PRIMARY KEY (`id`)
+            );
+        ]],
+
+        -- Select all creature experience overrides
         SEL_CONFIG_EXP_CREATURE = "SELECT id, experience FROM `%s`.`paragon_config_experience_creature`;",
+
+        -- Select all achievement experience overrides
         SEL_CONFIG_EXP_ACHIEVEMENT = "SELECT id, experience FROM `%s`.`paragon_config_experience_achievement`;",
+
+        -- Select all skill experience overrides
         SEL_CONFIG_EXP_SKILL = "SELECT id, experience FROM `%s`.`paragon_config_experience_skill`;",
-        SEL_CONFIG_EXP_QUEST = "SELECT id, experience FROM `%s`.`paragon_config_experience_quest`;"
+
+        -- Select all quest experience overrides
+        SEL_CONFIG_EXP_QUEST = "SELECT id, experience FROM `%s`.`paragon_config_experience_quest`;",
+
+        --- Default Configuration Values
+        -- Insert default paragon system configuration settings
+        -- These are loaded on first server start if not already present
+        INS_DEFAULT_CONFIG = [[
+            INSERT IGNORE INTO `%s`.`paragon_config` (field, value) VALUES
+            -- System Control
+            ('ENABLE_PARAGON_SYSTEM', '1'),
+            ('MINIMUM_LEVEL_FOR_PARAGON_XP', '0'),
+            ('PARAGON_LEVEL_CAP', '999'),
+            ('LEVEL_LINKED_TO_ACCOUNT', '0'),
+
+            -- Progression Settings
+            ('BASE_MAX_EXPERIENCE', '1000'),
+            ('POINTS_PER_LEVEL', '1'),
+            ('PARAGON_STARTING_LEVEL', '1'),
+            ('PARAGON_STARTING_EXPERIENCE', '0'),
+
+            -- Experience Rewards (Universal Defaults)
+            ('UNIVERSAL_CREATURE_EXPERIENCE', '50'),
+            ('UNIVERSAL_ACHIEVEVEMENT_EXPERIENCE', '100'),
+            ('UNIVERSAL_SKILL_EXPERIENCE', '25'),
+            ('UNIVERSAL_QUEST_EXPERIENCE', '75'),
+
+            -- Experience Multipliers
+            ('EXPERIENCE_MULTIPLIER_LOW_LEVEL', '1.5'),
+            ('EXPERIENCE_MULTIPLIER_HIGH_LEVEL', '0.8'),
+            ('LOW_LEVEL_THRESHOLD', '5'),
+            ('HIGH_LEVEL_THRESHOLD', '100'),
+
+            -- Point Customization
+            ('DEFAULT_STAT_LIMIT', '255');
+        ]]
     },
 
     --- Statistic Type Enumerations

@@ -44,11 +44,14 @@ local Paragon = Object:extend()
 ---
 --- Calculates the maximum experience required for a given level.
 ---
+--- Uses BASE_MAX_EXPERIENCE config with fallback to 1000 if not available.
+---
 --- @param level The paragon level
 --- @return The maximum experience required for that level
 ---
 local function CalculateMaxExperienceForLevel(level)
-    local base_max_exp = tonumber(Config:GetByField("BASE_MAX_EXPERIENCE"))
+    level = level or tonumber(Config:GetByField("PARAGON_STARTING_LEVEL"))
+    local base_max_exp = tonumber(Config:GetByField("BASE_MAX_EXPERIENCE")) or 1000
     return base_max_exp * level
 end
 
@@ -60,12 +63,17 @@ end
 --- @param paragon The paragon instance to update
 ---
 local function RecalculateAvailablePoints(paragon)
+    if not paragon or not paragon.level then
+        return
+    end
+
     local used_points = 0
     for _, stat_value in pairs(paragon.statistics) do
         used_points = used_points + stat_value
     end
 
-    local points_per_level = tonumber(Config:GetByField("POINTS_PER_LEVEL"))
+    -- Get points per level with fallback to 1 if config not available
+    local points_per_level = tonumber(Config:GetByField("POINTS_PER_LEVEL")) or 1
     paragon.points = (paragon.level * points_per_level) - used_points
 end
 
@@ -84,11 +92,16 @@ end
 ---
 --- @param player_guid The character's GUID to associate with this paragon instance
 ---
-function Paragon:new(player_guid)
+function Paragon:new(player_guid, account_id)
     self.guid = player_guid
-    self.level = 1
+
+    if (Config:GetByField("LEVEL_LINKED_TO_ACCOUNT") == 1) then
+        self.account = account_id
+    end
+
+    self.level = tonumber(Config:GetByField("PARAGON_STARTING_LEVEL")) or 1
     self.exp = {
-        current = 0,
+        current = tonumber(Config:GetByField("PARAGON_STARTING_EXPERIENCE")) or 0,
         max = CalculateMaxExperienceForLevel(self.level)
     }
     self.points = 0
@@ -102,42 +115,56 @@ end
 ---
 --- Asynchronously loads both level/experience and statistics from the database.
 ---
---- This method initiates two concurrent async queries:
---- 1. GetParagonByCharacter: loads level and experience
---- 2. GetParagonStatByCharacter: loads invested statistics
+--- Routes to correct database table based on LEVEL_LINKED_TO_ACCOUNT configuration:
+--- - If enabled (1): Loads from account_paragon table using account_id
+--- - If disabled (0): Loads from character_paragon table using character guid
 ---
 --- The callback is invoked after both queries complete.
 ---
 --- @param callback Function to invoke after loading (receives guid, self)
 ---
 function Paragon:Load(callback)
-    self:LoadLevel()
-    self:LoadStats(callback)
+    if (Config:GetByField("LEVEL_LINKED_TO_ACCOUNT") == 1) then
+        -- Account-linked mode: load from account_paragon
+        Repository:GetParagonByAccountId(self.account, function(data)
+            if data and data.level then
+                self.level = data.level
+                self.exp.current = data.current_experience or 0
+                self.exp.max = CalculateMaxExperienceForLevel(self.level)
+            end
+            self:LoadStats(callback)
+        end)
+    else
+        -- Character-linked mode: load from character_paragon
+        Repository:GetParagonByCharacter(self.guid, function(data)
+            if data and data.level then
+                self.level = data.level
+                self.exp.current = data.current_experience or 0
+                self.exp.max = CalculateMaxExperienceForLevel(self.level)
+            end
+            self:LoadStats(callback)
+        end)
+    end
 end
 
 ---
---- Saves the current paragon statistics to the database.
+--- Saves all paragon data to the database including level, experience, and statistics.
 ---
---- Only persists statistics - level/exp are managed separately in
---- paragon_hook.lua when player logs out.
+--- Persists character paragon progression and all invested statistic points.
+--- Routes to correct database table based on LEVEL_LINKED_TO_ACCOUNT configuration:
+--- - If enabled (1): Saves to account_paragon table using account_id
+--- - If disabled (0): Saves to character_paragon table using character guid
 ---
 function Paragon:Save()
+    if (Config:GetByField("LEVEL_LINKED_TO_ACCOUNT") == 1) then
+        -- Account-linked mode: save to account_paragon
+        Repository:SaveParagonByAccount(self.account, self.level, self.exp.current)
+    else
+        -- Character-linked mode: save to character_paragon
+        Repository:SaveParagonByCharacter(self.guid, self.level, self.exp.current)
+    end
+    -- Character statistics are always saved using character GUID regardless of mode
     Repository:SaveParagonCharacterStat(self.guid, self.statistics)
-end
-
----
---- Asynchronously loads paragon level and experience data from database.
----
---- @private
----
-function Paragon:LoadLevel()
-    Repository:GetParagonByCharacter(self.guid, function(data)
-        if data then
-            self.level = data.level
-            self.exp.current = data.current_experience
-            self.exp.max = CalculateMaxExperienceForLevel(self.level)
-        end
-    end)
 end
 
 ---
@@ -191,6 +218,12 @@ function Paragon:SetLevel(level)
         return self
     end
 
+    -- Enforce level cap if configured (0 = unlimited)
+    local level_cap = tonumber(Config:GetByField("PARAGON_LEVEL_CAP")) or 0
+    if level_cap > 0 and level > level_cap then
+        level = level_cap
+    end
+
     local previous_level = self.level
     if previous_level ~= level then
         self.level = level
@@ -200,7 +233,7 @@ function Paragon:SetLevel(level)
         -- Trigger Mediator event after level changes
         if Mediator then
             Mediator.On("OnParagonLevelChanged", {
-                arguments = { self, previous_level, level }
+                arguments = { GetPlayerByGUID(GetPlayerGUID(self.guid)), self, previous_level, level }
             })
         end
     end

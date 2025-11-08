@@ -25,6 +25,7 @@
 
 local Paragon = require("paragon_class")
 local Config = require("paragon_config")
+local Repository = require("paragon_repository")
 local Constant = require("paragon_constant")
 
 -- ============================================================================
@@ -171,6 +172,12 @@ local function UpdatePlayerExperience(player, paragon, source_type, entry)
         return false
     end
 
+    -- Check minimum level requirement
+    local min_level = tonumber(Config:GetByField("MINIMUM_LEVEL_FOR_PARAGON_XP")) or 0
+    if player:GetLevel() < min_level then
+        return false
+    end
+
     paragon, source_type, entry = Mediator.On("OnBeforeUpdatePlayerExperience", {
         arguments = { player, paragon, source_type, entry },
         defaults = { paragon, source_type, entry },
@@ -185,9 +192,9 @@ local function UpdatePlayerExperience(player, paragon, source_type, entry)
     }
 
     local config_key = source_config_map[source_type] or "UNIVERSAL_CREATURE_EXPERIENCE"
-    local universal_value = Config:GetByField(config_key)
+    local universal_value = tonumber(Config:GetByField(config_key)) or 0
 
-    if not universal_value then
+    if universal_value <= 0 then
         return false
     end
 
@@ -531,8 +538,18 @@ function Hook.OnPlayerLogin(event, player)
         return
     end
 
-    -- Create new paragon instance for this character
-    local paragon = Paragon(player:GetGUIDLow())
+    -- Check if paragon system is enabled
+    local system_enabled = tonumber(Config:GetByField("ENABLE_PARAGON_SYSTEM")) or 1
+    if system_enabled == 0 then
+        return
+    end
+
+    -- Get paragon configuration and player info
+    local account_id = player:GetAccountId()
+    local character_guid = player:GetGUIDLow()
+
+    -- Create new paragon instance with account_id
+    local paragon = Paragon(character_guid, account_id)
 
     -- Trigger Mediator event before loading
     paragon, callback = Mediator.On("OnBeforePlayerStatLoad", {
@@ -583,6 +600,25 @@ function Hook.OnPlayerLogout(event, player)
     Mediator.On("OnAfterPlayerStatSave", {
         arguments = { player, paragon },
     })
+end
+
+---
+--- Handles character deletion event.
+---
+--- Cleans up paragon data when a character is deleted from the account.
+--- Only deletes data if LEVEL_LINKED_TO_ACCOUNT is disabled (character-level paragon).
+--- When account-level paragon is enabled, data persists for other characters on the account.
+---
+--- @param event The event ID (2 = PLAYER_EVENT_ON_CHARACTER_DELETE)
+--- @param player_guid The GUID of the character being deleted
+---
+function Hook.OnCharacterDelete(event, player_guid)
+    -- Delete paragon data (method will check account_linked and handle appropriately)
+    -- If account-linked: preserves data (other characters on account still use it)
+    -- If character-linked: deletes data for this character
+    if player_guid then
+        Repository:DeleteParagonData(player_guid)
+    end
 end
 
 -- ============================================================================
@@ -804,6 +840,7 @@ end
 -- ============================================================================
 
 -- Player Events
+RegisterPlayerEvent(2, Hook.OnCharacterDelete)
 RegisterPlayerEvent(3, Hook.OnPlayerLogin)
 RegisterPlayerEvent(4, Hook.OnPlayerLogout)
 RegisterPlayerEvent(7, Hook.OnPlayerKillCreature)
