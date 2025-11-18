@@ -24,6 +24,33 @@
         </Layers>
     </Frame>
 
+    <Frame name="ParagonCharacterLevel" parent="PlayerFrame" hidden="false" frameLevel="999">
+        <Size x="50" y="50"/>
+        <Anchors>
+            <Anchor point="CENTER" x="-40" y="-30"></Anchor>
+        </Anchors>
+        <Layers level="BACKGROUND">
+            <Layer>
+                <Texture file="Interface/Common/portrait-ring-withbg"/>
+            </Layer>
+        </Layers>
+
+        <Layers level="BACKGROUND">
+            <Layer>
+                <FontString name="Text" parentKey="Text" inherits="GameFontNormalSmall" text="0">
+                    <Color r="0.812" g="0.373" b="0.878" />
+                    <Anchors>
+                        <Anchor point="CENTER">
+                            <Offset>
+                                <AbsDimension x="-1" y="0"/>
+                            </Offset>
+                        </Anchor>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+    </Frame>
+
     <!-- Stat Item Template (icon + value) -->
     <Frame name="ParagonStatItemTemplate" virtual="true" enableMouse="true">
         <Size x="55" y="55"/>

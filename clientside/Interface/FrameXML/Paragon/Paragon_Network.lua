@@ -140,6 +140,7 @@ end
 -- @usage Server call: SendClientRequest("ParagonAnniversary", 1, {500})
 function UIParagon_OnClientReceiveLevel(player, arg_table)
     local level = arg_table[1]
+    ParagonCharacterLevel.Text:SetText(level)
     if UIParagon and UIParagon.TopBanner and UIParagon.TopBanner.Level then
         UIParagon.TopBanner.Level.Text:SetText(level)
     end
