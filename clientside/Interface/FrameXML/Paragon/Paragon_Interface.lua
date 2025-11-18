@@ -146,6 +146,9 @@ function UIParagon_OnLoad(self)
     -- Initialize points display with 0 points
     self.body.TopSpacer.Points:SetText(string.format(self.Locales.POINTS_TO_SPEND, 0, self.Locales.POINTS_SINGULAR))
 
+    -- Enable closing the frame with Escape key
+    tinsert(UISpecialFrames, "UIParagon")
+
     -- Request initial data from server (Hook ID: 1)
     SendClientRequest("ParagonAnniversary", 1)
 end
