@@ -121,7 +121,7 @@ local function UpdatePlayerStatistics(player, paragon, apply)
 
         -- Apply bonus based on statistic type
         if stat_data.type == "UNIT_MODS" then
-            player:HandleStatModifier(constant_stat_type[stat_data.value], stat_data.application, stat_value, apply)
+            player:HandleStatFlatModifier(constant_stat_type[stat_data.value], stat_data.application, stat_value, apply)
         elseif stat_data.type == "COMBAT_RATING" then
             player:ApplyRatingMod(constant_stat_type[stat_data.value], stat_value, apply)
         elseif stat_data.type == "AURA" then
