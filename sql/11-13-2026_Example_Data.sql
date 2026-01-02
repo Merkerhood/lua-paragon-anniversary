@@ -93,7 +93,8 @@ DROP TABLE IF EXISTS `paragon_config_category`;
 CREATE TABLE `paragon_config_category` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(50) NOT NULL,
-  PRIMARY KEY (`id`,`name`)
+  PRIMARY KEY (`id`,`name`),
+  UNIQUE (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 /*Data for the table `paragon_config_category` */
