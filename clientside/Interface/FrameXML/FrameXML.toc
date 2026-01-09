@@ -160,5 +160,6 @@ Templates\UITemplate2X.xml
 
 ## UI
 Paragon\UIParagon.xml
+Paragon\ParagonExpBar.xml
 
 ## END - Paragon

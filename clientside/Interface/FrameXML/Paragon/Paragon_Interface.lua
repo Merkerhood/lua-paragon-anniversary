@@ -23,6 +23,14 @@
 ]]
 
 -- ============================================================================
+-- CVAR REGISTRATION
+-- ============================================================================
+
+-- Register custom CVar for Paragon MainMenuBar XP visibility
+-- Parameters: name, defaultValue, characterSpecific (true/false)
+RegisterCVar("paragonShowMainMenuXP", "0", true)
+
+-- ============================================================================
 -- STATIC POPUPS (Dialogues)
 -- ============================================================================
 
@@ -384,16 +392,15 @@ end
 -- @usage Called automatically by XML OnLoad script
 function UIParagonExperienceBar_OnLoad(self)
     -- Cache child frame references via parentKey
-    self.fill = self.Fill
-    self.hover_text = self.HoverText
-    self.text = self.Text
-
-    -- Max width for fill bar (560px = full bar)
-    self.maxWidth = 560
+    self.statusbar = self.StatusBar
+    self.hover_text = self.OverlayFrame.HoverText
+    self.text = self.OverlayFrame.Text
 
     -- Initialize text visibility (hover text hidden by default)
     self.hover_text:SetAlpha(0)
+    self.hover_text:SetText("")
     self.text:SetAlpha(1)
+    self.text:SetText("0%")
 
     -- Animation parameters
     self.hoverStartY = 5       -- Starting Y position for hover text animation
@@ -406,6 +413,10 @@ function UIParagonExperienceBar_OnLoad(self)
     -- Initialize default XP values
     self.currentXP = 0
     self.maxXP = 150
+
+    -- Set initial position for hover text
+    self.hover_text:ClearAllPoints()
+    self.hover_text:SetPoint("CENTER", 0, self.hoverStartY)
 end
 
 --- OnShow handler for experience bar
@@ -417,7 +428,7 @@ function UIParagonExperienceBar_OnShow(self)
 end
 
 --- Sets the experience bar values and updates display
--- Calculates percentage, updates fill width, and sets both text displays
+-- Updates the StatusBar value and sets both text displays
 -- @param self Frame The experience bar frame
 -- @param current number Current XP amount
 -- @param max number Maximum XP amount (default: 150)
@@ -429,8 +440,9 @@ function UIParagonExperienceBar_SetExperience(self, current, max)
     -- Calculate percentage (0.0 to 1.0)
     local percentage = self.currentXP / self.maxXP
 
-    -- Update fill bar width
-    self.fill:SetWidth(self.maxWidth * percentage)
+    -- Update StatusBar
+    self.statusbar:SetMinMaxValues(0, self.maxXP)
+    self.statusbar:SetValue(self.currentXP)
 
     -- Update percentage text (always visible)
     self.text:SetText(string.format("%d%%", percentage * 100))
@@ -574,6 +586,80 @@ function UIParagonStatItem_OnLeave(self)
 
     -- Hide tooltip
     GameTooltip:Hide()
+end
+
+-- ============================================================================
+-- SHOW MAINMENU XP CHECKBOX
+-- ============================================================================
+
+--- Initialize the checkbox for showing Paragon XP on MainMenuBar
+-- Sets the initial state from CVar and configures the label
+-- @param self CheckButton The checkbox frame
+function UIParagon_ShowMainMenuXP_OnLoad(self)
+    -- Get saved setting from CVar, initialize if it doesn't exist
+    local cvarValue = GetCVar("paragonShowMainMenuXP")
+    if (cvarValue == nil) then
+        -- CVar doesn't exist yet, create it with default value (0 = disabled)
+        SetCVar("paragonShowMainMenuXP", "0")
+        cvarValue = "0"
+    end
+
+    local isEnabled = (cvarValue == "1")
+
+    self:SetChecked(isEnabled)
+
+    local Locales = GetLocaleTable()
+    self.Text:SetText(Locales.SHOW_MAINMENU_XP_LABEL or "Show XP bar on main interface")
+
+    UIParagon_UpdateMainMenuXPVisibility()
+end
+
+--- Handle checkbox click event
+-- Toggles the visibility of ParagonExpBar on MainMenuBar
+-- @param self CheckButton The checkbox frame
+function UIParagon_ShowMainMenuXP_OnClick(self)
+    local isChecked = self:GetChecked()
+
+    SetCVar("paragonShowMainMenuXP", isChecked and "1" or "0")
+
+    UIParagon_UpdateMainMenuXPVisibility()
+
+    if isChecked then
+        PlaySound("igMainMenuOptionCheckBoxOn")
+    else
+        PlaySound("igMainMenuOptionCheckBoxOff")
+    end
+end
+
+--- Handle checkbox hover event
+-- Shows tooltip with description
+-- @param self CheckButton The checkbox frame
+function UIParagon_ShowMainMenuXP_OnEnter(self)
+    local Locales = GetLocaleTable()
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(Locales.SHOW_MAINMENU_XP_LABEL or "Show XP bar on main interface", 1, 1, 1)
+    GameTooltip:AddLine(Locales.SHOW_MAINMENU_XP_TOOLTIP or "If checked, displays the Paragon experience bar above your character's XP bar at the bottom of the screen.", nil, nil, nil, true)
+    GameTooltip:Show()
+end
+
+--- Update the visibility of ParagonExpBar based on checkbox state
+-- This function is called when the checkbox is toggled or on load
+function UIParagon_UpdateMainMenuXPVisibility()
+    if not ParagonExpBar then return end
+
+    local cvarValue = GetCVar("paragonShowMainMenuXP")
+    if (cvarValue == nil) then
+        SetCVar("paragonShowMainMenuXP", "0")
+        cvarValue = "0"
+    end
+
+    local isEnabled = (cvarValue == "1")
+
+    if isEnabled then
+        ParagonExpBar_Update()
+    else
+        ParagonExpBar:Hide()
+    end
 end
 
 -- ============================================================================
