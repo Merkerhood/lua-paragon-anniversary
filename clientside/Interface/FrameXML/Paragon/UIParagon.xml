@@ -189,7 +189,7 @@
 
     <!-- Main Paragon Frame -->
     <Frame name="UIParagon" parent="UIParent" hidden="true" inherits="PortraitFrame2X">
-        <Size x="750" y="550"/>
+        <Size x="750" y="50"/>
         <Anchors>
             <Anchor point="CENTER"/>
         </Anchors>
@@ -217,6 +217,25 @@
         </Layers>
 
         <Frames>
+            <!-- Title -->
+            <Frame name="$parentTitle" parentKey="Title" toplevel="true" frameLevel="11">
+                <Size x="150" y="150"/>
+
+                <Anchors>
+                    <Anchor point="TOP"/>
+                </Anchors>
+
+                <Layers>
+                    <Layer level="BORDER">
+                        <FontString name="$parentText" parentKey="Text" inherits="GameFontNormal" text="Paragon Anniversary">
+                            <Anchors>
+                                <Anchor point="TOP" x="0" y="7"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+
             <!-- Top Banner (Level + Experience Bar) -->
             <Frame name="$parentTopBanner" parentKey="TopBanner">
                 <Size x="650" y="100"/>
@@ -448,6 +467,23 @@
                     </Frame>
                 </Frames>
             </Frame>
+
+            <Button name="$parentApplyButton" parentKey="ApplyButton" inherits="BigRedThreeSliceButtonTemplate">
+                <Size x="160" y="30"/>
+                <Anchors>
+                    <Anchor point="BOTTOM" x="0" y="10"/>
+                </Anchors>
+
+                <Layers>
+                    <Layer level="OVERLAY">
+                        <FontString name="$parentText" parentKey="Text" inherits="GameFontNormal" text="Appliquer">
+                            <Anchors>
+                                <Anchor point="CENTER" x="0" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Button>
         </Frames>
 
         <Scripts>
