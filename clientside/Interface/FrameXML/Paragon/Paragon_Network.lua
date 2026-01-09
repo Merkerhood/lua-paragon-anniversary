@@ -156,6 +156,7 @@ function UIParagon_OnClientReceiveXP(player, arg_table)
     local maxXP = arg_table[2]
     if UIParagon and UIParagon.TopBanner and UIParagon.TopBanner.ExperienceBar then
         UIParagonExperienceBar_SetExperience(UIParagon.TopBanner.ExperienceBar, currentXP, maxXP)
+        ParagonExpBar_SetExperience(currentXP, maxXP)
     end
 end
 

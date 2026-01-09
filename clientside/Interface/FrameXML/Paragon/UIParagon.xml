@@ -256,67 +256,78 @@
                     </Frame>
 
                     <!-- Experience Bar -->
-                    <Frame name="$parentExperienceBar" parentKey="ExperienceBar" enableMouse="true" setAllPoints="true">
+                    <Frame name="$parentExperienceBar" parentKey="ExperienceBar" enableMouse="true">
                         <Size x="570" y="20"/>
                         <Anchors>
                             <Anchor point="CENTER" relativeTo="$parentLevel" relativePoint="BOTTOM" y="-15"/>
                         </Anchors>
 
-                        <Layers>
-                            <Layer level="BACKGROUND">
-                                <Texture name="$parentBackground" file="Interface/HUD/UIExperienceBar2x">
-                                    <Size x="565" y="13"/>
-                                    <Anchors>
-                                        <Anchor point="CENTER" x="-2" y="2"/>
-                                    </Anchors>
-                                    <TexCoords left="0.000488281" right="0.550293" top="0.0820312" bottom="0.152344"/>
-                                </Texture>
-                            </Layer>
+                        <Frames>
+                            <StatusBar name="$parentStatusBar" parentKey="StatusBar" minValue="0" maxValue="100" defaultValue="0">
+                                <Size x="561" y="13"/>
+                                <Anchors>
+                                    <Anchor point="CENTER" x="-2" y="2"/>
+                                </Anchors>
 
-                            <Layer level="ARTWORK">
-                                <Texture name="$parentFill" parentKey="Fill" file="Interface\TargetingFrame\UI-StatusBar">
-                                    <Size x="0" y="9"/>
-                                    <Anchors>
-                                        <Anchor point="LEFT" relativeTo="$parentBackground" relativePoint="LEFT">
-                                            <Offset x="2.5" y="0"/>
-                                        </Anchor>
-                                    </Anchors>
-                                    <Color r="0.90" g="0.80" b="0.50"/>
-                                </Texture>
-                            </Layer>
+                                <Layers>
+                                    <Layer level="BACKGROUND">
+                                        <Texture name="$parentBackground" file="Interface/HUD/UIExperienceBar2x">
+                                            <Size x="565" y="13"/>
+                                            <Anchors>
+                                                <Anchor point="CENTER"/>
+                                            </Anchors>
+                                            <TexCoords left="0.000488281" right="0.550293" top="0.0820312" bottom="0.152344"/>
+                                        </Texture>
+                                    </Layer>
 
-                            <Layer level="OVERLAY">
-                                <Texture file="Interface/HUD/UIExperienceBar2x">
-                                    <Size x="570" y="18"/>
-                                    <Anchors>
-                                        <Anchor point="CENTER"/>
-                                    </Anchors>
-                                    <TexCoords left="0.000488281" right="0.558105" top="0.785156" bottom="0.917969"/>
-                                </Texture>
+                                    <Layer level="OVERLAY">
+                                        <Texture file="Interface/HUD/UIExperienceBar2x">
+                                            <Size x="570" y="18"/>
+                                            <Anchors>
+                                                <Anchor point="CENTER" x="2" y="-2"/>
+                                            </Anchors>
+                                            <TexCoords left="0.000488281" right="0.558105" top="0.785156" bottom="0.917969"/>
+                                        </Texture>
+                                    </Layer>
+                                </Layers>
 
-                                <FontString name="$parentHoverText" parentKey="HoverText" inherits="GameFontNormal">
-                                    <Anchors>
-                                        <Anchor point="CENTER" y="5"/>
-                                    </Anchors>
-                                    <Color r="1" g="1" b="1"/>
-                                    <Shadow>
-                                        <Color r="0" g="0" b="0"/>
-                                        <Offset x="-1" y="-2"/>
-                                    </Shadow>
-                                </FontString>
+                                <BarTexture file="Interface\TargetingFrame\UI-StatusBar"/>
+                                <BarColor r="0.90" g="0.80" b="0.50"/>
+                            </StatusBar>
 
-                                <FontString name="$parentText" parentKey="Text" inherits="GameFontNormal" text="100">
-                                    <Anchors>
-                                        <Anchor point="CENTER" y="3"/>
-                                    </Anchors>
-                                    <Color r="1" g="1" b="1"/>
-                                    <Shadow>
-                                        <Color r="0" g="0" b="0"/>
-                                        <Offset x="-1" y="-1"/>
-                                    </Shadow>
-                                </FontString>
-                            </Layer>
-                        </Layers>
+                            <Frame name="$parentOverlayFrame" parentKey="OverlayFrame" frameLevel="999">
+                                <Anchors>
+                                    <Anchor point="TOPLEFT"/>
+                                    <Anchor point="BOTTOMRIGHT"/>
+                                </Anchors>
+
+                                <Layers>
+                                    <Layer level="OVERLAY">
+                                        <FontString name="$parentHoverText" parentKey="HoverText" inherits="GameFontNormal">
+                                            <Anchors>
+                                                <Anchor point="CENTER" y="5"/>
+                                            </Anchors>
+                                            <Color r="1" g="1" b="1"/>
+                                            <Shadow>
+                                                <Color r="0" g="0" b="0"/>
+                                                <Offset x="-1" y="-2"/>
+                                            </Shadow>
+                                        </FontString>
+
+                                        <FontString name="$parentText" parentKey="Text" inherits="GameFontNormal">
+                                            <Anchors>
+                                                <Anchor point="CENTER" y="3"/>
+                                            </Anchors>
+                                            <Color r="1" g="1" b="1"/>
+                                            <Shadow>
+                                                <Color r="0" g="0" b="0"/>
+                                                <Offset x="-1" y="-1"/>
+                                            </Shadow>
+                                        </FontString>
+                                    </Layer>
+                                </Layers>
+                            </Frame>
+                        </Frames>
 
                         <Scripts>
                             <OnLoad>
@@ -353,6 +364,43 @@
                     </OnClick>
                 </Scripts>
             </Button>
+
+            <!-- MainMenuBar XP Checkbox -->
+            <CheckButton name="$parentShowMainMenuXP" parentKey="ShowMainMenuXP" inherits="UICheckButtonTemplate">
+                <Size x="18" y="18"/>
+                <Anchors>
+                    <Anchor point="BOTTOMLEFT" relativeTo="$parentTopBannerExperienceBar" x="0" y="-18"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="ARTWORK">
+                        <FontString name="$parentText" parentKey="Text" inherits="GameFontNormalSmall">
+                            <Anchors>
+                                <Anchor point="LEFT" relativePoint="RIGHT">
+                                    <Offset>
+                                        <AbsDimension x="0" y="1"/>
+                                    </Offset>
+
+                                </Anchor>
+                            </Anchors>
+                            <Color r="0.90" g="0.80" b="0.50"/>
+                        </FontString>
+                    </Layer>
+                </Layers>
+                <Scripts>
+                    <OnLoad>
+                        UIParagon_ShowMainMenuXP_OnLoad(self)
+                    </OnLoad>
+                    <OnClick>
+                        UIParagon_ShowMainMenuXP_OnClick(self)
+                    </OnClick>
+                    <OnEnter>
+                        UIParagon_ShowMainMenuXP_OnEnter(self)
+                    </OnEnter>
+                    <OnLeave>
+                        GameTooltip:Hide()
+                    </OnLeave>
+                </Scripts>
+            </CheckButton>
 
             <!-- Body (Statistics Section) -->
             <Frame name="$parentBody" parentKey="Body">

@@ -16,7 +16,10 @@
 local Locales = {
     ["frFR"] = {
         EXPERIENCE_TEXT = "Expérience %d / %d",
+        PARAGON_EXPERIENCE_TEXT = "Paragon %d / %d (%d%%)",
         STATISTICS_TEXT = "Statistiques",
+        SHOW_MAINMENU_XP_LABEL = "Afficher la barre XP sur l'interface principale",
+        SHOW_MAINMENU_XP_TOOLTIP = "Si coché, affiche la barre d'expérience Paragon au-dessus de la barre XP de votre personnage en bas de l'écran.",
 
         -- ========================================================================
         -- CATEGORY NAMES
@@ -143,7 +146,10 @@ local Locales = {
     },
     ["enUS"] = {
         EXPERIENCE_TEXT = "Experience %d / %d",
+        PARAGON_EXPERIENCE_TEXT = "Paragon %d / %d (%d%%)",
         STATISTICS_TEXT = "Statistics",
+        SHOW_MAINMENU_XP_LABEL = "Show XP bar on main interface",
+        SHOW_MAINMENU_XP_TOOLTIP = "If checked, displays the Paragon experience bar above your character's XP bar at the bottom of the screen.",
 
         -- ========================================================================
         -- CATEGORY NAMES
@@ -270,7 +276,10 @@ local Locales = {
     },
     ["deDE"] = {
         EXPERIENCE_TEXT = "Experience %d / %d",
+        PARAGON_EXPERIENCE_TEXT = "Paragon %d / %d (%d%%)",
         STATISTICS_TEXT = "Statistics",
+        SHOW_MAINMENU_XP_LABEL = "XP-Leiste auf Hauptinterface anzeigen",
+        SHOW_MAINMENU_XP_TOOLTIP = "Wenn aktiviert, wird die Paragon-Erfahrungsleiste über der Charakterleiste am unteren Bildschirmrand angezeigt.",
 
         -- ========================================================================
         -- CATEGORY NAMES (Custom translations)
@@ -391,6 +400,9 @@ local Locales = {
     },
     ["esES"] = {
         EXPERIENCE_TEXT = "Experience %d / %d",
+        PARAGON_EXPERIENCE_TEXT = "Paragon %d / %d (%d%%)",
+        SHOW_MAINMENU_XP_LABEL = "Mostrar barra de XP en interfaz principal",
+        SHOW_MAINMENU_XP_TOOLTIP = "Si está marcado, muestra la barra de experiencia de Paragon encima de la barra de XP de tu personaje en la parte inferior de la pantalla.",
         STATISTICS_TEXT = "Statistics",
 
         -- ========================================================================
@@ -512,6 +524,9 @@ local Locales = {
     },
     ["ruRU"] = {
         EXPERIENCE_TEXT = "Experience %d / %d",
+        PARAGON_EXPERIENCE_TEXT = "Paragon %d / %d (%d%%)",
+        SHOW_MAINMENU_XP_LABEL = "Показать полосу опыта на основном интерфейсе",
+        SHOW_MAINMENU_XP_TOOLTIP = "Если отмечено, отображает полосу опыта Парагона над полосой опыта вашего персонажа в нижней части экрана.",
         STATISTICS_TEXT = "Statistics",
 
         -- ========================================================================
@@ -633,6 +648,9 @@ local Locales = {
     },
     ["ptBR"] = {
         EXPERIENCE_TEXT = "Experience %d / %d",
+        PARAGON_EXPERIENCE_TEXT = "Paragon %d / %d (%d%%)",
+        SHOW_MAINMENU_XP_LABEL = "Mostrar barra de XP na interface principal",
+        SHOW_MAINMENU_XP_TOOLTIP = "Se marcado, exibe a barra de experiência Paragon acima da barra de XP do seu personagem na parte inferior da tela.",
         STATISTICS_TEXT = "Statistics",
 
         -- ========================================================================
@@ -754,6 +772,9 @@ local Locales = {
     },
     ["itIT"] = {
         EXPERIENCE_TEXT = "Experience %d / %d",
+        PARAGON_EXPERIENCE_TEXT = "Paragon %d / %d (%d%%)",
+        SHOW_MAINMENU_XP_LABEL = "Mostra barra XP sull'interfaccia principale",
+        SHOW_MAINMENU_XP_TOOLTIP = "Se selezionato, visualizza la barra esperienza Paragon sopra la barra XP del tuo personaggio nella parte inferiore dello schermo.",
         STATISTICS_TEXT = "Statistics",
 
         -- ========================================================================
@@ -875,6 +896,9 @@ local Locales = {
     },
     ["koKR"] = {
         EXPERIENCE_TEXT = "Experience %d / %d",
+        PARAGON_EXPERIENCE_TEXT = "Paragon %d / %d (%d%%)",
+        SHOW_MAINMENU_XP_LABEL = "메인 인터페이스에 경험치 바 표시",
+        SHOW_MAINMENU_XP_TOOLTIP = "선택하면 화면 하단의 캐릭터 경험치 바 위에 파라곤 경험치 바가 표시됩니다.",
         STATISTICS_TEXT = "Statistics",
 
         -- ========================================================================
@@ -996,6 +1020,9 @@ local Locales = {
     },
     ["zhCN"] = {
         EXPERIENCE_TEXT = "Experience %d / %d",
+        PARAGON_EXPERIENCE_TEXT = "Paragon %d / %d (%d%%)",
+        SHOW_MAINMENU_XP_LABEL = "在主界面上显示经验条",
+        SHOW_MAINMENU_XP_TOOLTIP = "如果选中，将在屏幕底部角色经验条上方显示巅峰经验条。",
         STATISTICS_TEXT = "Statistics",
 
         -- ========================================================================
@@ -1117,6 +1144,9 @@ local Locales = {
     },
     ["zhTW"] = {
         EXPERIENCE_TEXT = "Experience %d / %d",
+        PARAGON_EXPERIENCE_TEXT = "Paragon %d / %d (%d%%)",
+        SHOW_MAINMENU_XP_LABEL = "在主介面上顯示經驗條",
+        SHOW_MAINMENU_XP_TOOLTIP = "如果勾選，將在螢幕底部角色經驗條上方顯示巔峰經驗條。",
         STATISTICS_TEXT = "Statistics",
 
         -- ========================================================================
@@ -1249,5 +1279,5 @@ Locales["esMX"] = Locales["esES"]
 -- @usage local L = GetLocaleTable(); print(L.EXPERIENCE_TEXT)
 function GetLocaleTable()
     local locale = GetLocale()
-    return Locales["enUS"]
+    return Locales[locale] or Locales["enUS"]
 end
