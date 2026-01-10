@@ -189,7 +189,7 @@
 
     <!-- Main Paragon Frame -->
     <Frame name="UIParagon" parent="UIParent" hidden="true" inherits="PortraitFrame2X">
-        <Size x="750" y="50"/>
+        <Size x="750" y="600"/>
         <Anchors>
             <Anchor point="CENTER"/>
         </Anchors>
