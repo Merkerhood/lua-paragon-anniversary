@@ -468,6 +468,7 @@
                 </Frames>
             </Frame>
 
+            <!-- Accept Buttons -->
             <Button name="$parentApplyButton" parentKey="ApplyButton" inherits="BigRedThreeSliceButtonTemplate">
                 <Size x="160" y="30"/>
                 <Anchors>
@@ -476,13 +477,22 @@
 
                 <Layers>
                     <Layer level="OVERLAY">
-                        <FontString name="$parentText" parentKey="Text" inherits="GameFontNormal" text="Appliquer">
+                        <FontString name="$parentText" parentKey="Text" inherits="GameFontNormal">
                             <Anchors>
                                 <Anchor point="CENTER" x="0" y="0"/>
                             </Anchors>
                         </FontString>
                     </Layer>
                 </Layers>
+
+                <Scripts>
+                    <OnLoad>
+                        UIParagon_ApplyButton_OnLoad(self)
+                    </OnLoad>
+                    <OnClick>
+                        UIParagon_ApplyButton_OnClick(self)
+                    </OnClick>
+                </Scripts>
             </Button>
         </Frames>
 

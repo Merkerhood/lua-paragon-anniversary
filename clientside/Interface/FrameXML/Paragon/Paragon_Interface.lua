@@ -319,9 +319,16 @@ function UIParagon_RebuildStatistics()
                 -- Set stat icon texture
                 SetPortraitToTexture(statFrame.Icon, stat.icon)
 
-                -- Update value badge with current stat value
+                -- Check if this stat has pending changes and use that value instead
+                local displayValue = stat.value
+                local key = categoryId .. "_" .. stat.id
+                if PendingChanges and PendingChanges.stats and PendingChanges.stats[key] then
+                    displayValue = PendingChanges.stats[key].value
+                end
+
+                -- Update value badge with current or pending stat value
                 if statFrame.Value and statFrame.Value.Text then
-                    local valueText = tostring(stat.value)
+                    local valueText = tostring(displayValue)
                     statFrame.Value.Text:SetText(valueText)
 
                     -- Dynamic horizontal offset based on digit count for proper centering
@@ -372,6 +379,11 @@ function UIParagon_RebuildStatistics()
                             })
                         end
                     end)
+                end
+
+                -- Reapply visual modification marker if this stat has pending changes
+                if PendingChanges and PendingChanges.stats and PendingChanges.stats[key] then
+                    UIParagon_MarkStatAsModified(categoryId, stat.id, true)
                 end
 
                 xOffset = xOffset + 75  -- Move right for next stat (55 width + 20 spacing)
@@ -659,6 +671,55 @@ function UIParagon_UpdateMainMenuXPVisibility()
         ParagonExpBar_Update()
     else
         ParagonExpBar:Hide()
+    end
+end
+
+-- ============================================================================
+-- APPLY BUTTON
+-- ============================================================================
+
+--- Initializes the Apply button on load
+-- Sets the localized button text
+-- @param self Button The ApplyButton frame
+function UIParagon_ApplyButton_OnLoad(self)
+    local Locales = GetLocaleTable()
+    self.Text:SetText(Locales.APPLY_BUTTON_TEXT)
+end
+
+--- Handles the Apply button click event
+-- Sends all pending stat changes to the server
+-- @param self Button The ApplyButton frame
+function UIParagon_ApplyButton_OnClick(self)
+    UIParagon_SendPendingChanges()
+    PlaySound("igMainMenuOptionCheckBoxOn")
+end
+
+--- Marks a stat frame as modified or unmodified in the UI
+-- Adds/removes a visual indicator (yellow border) to show pending changes
+-- @param categoryId number The category ID containing the stat
+-- @param statId number The stat ID to mark
+-- @param isModified boolean true to mark as modified, false to remove marking
+function UIParagon_MarkStatAsModified(categoryId, statId, isModified)
+    local statisticsList = UIParagon.Body.StatisticsList
+    if not statisticsList then return end
+
+    -- Find the stat frame
+    local statFrameName = "ParagonStat_" .. categoryId .. "_" .. statId
+    local statFrame = _G[statFrameName]
+
+    if not statFrame then return end
+
+    -- Apply or remove visual indicator
+    if isModified then
+        -- Add yellow border to indicate modification
+        if statFrame.Border then
+            statFrame.Border:SetVertexColor(1, 0.82, 0, 1)  -- Golden/yellow color
+        end
+    else
+        -- Reset to default white color
+        if statFrame.Border then
+            statFrame.Border:SetVertexColor(1, 1, 1, 1)
+        end
     end
 end
 
