@@ -55,6 +55,18 @@ local Locales = {
         POPUP_BUTTON_CANCEL = "Annuler",
 
         -- ========================================================================
+        -- APPLY BUTTON
+        -- ========================================================================
+        APPLY_BUTTON_TEXT = "Appliquer",
+
+        -- ========================================================================
+        -- NOTIFICATION BADGE
+        -- ========================================================================
+        NOTIFICATION_TITLE = "Points Paragon non distribués",
+        NOTIFICATION_MESSAGE = "Vous avez des points Paragon non distribués !",
+        NOTIFICATION_DISMISS = "Cliquer pour masquer cette notification.",
+
+        -- ========================================================================
         -- TUTORIAL MODE
         -- ========================================================================
         BUTTON_HELP = "?",
@@ -183,6 +195,18 @@ local Locales = {
         POPUP_ACTION_REMOVE = "remove",
         POPUP_BUTTON_CONFIRM = "Confirm",
         POPUP_BUTTON_CANCEL = "Cancel",
+
+        -- ========================================================================
+        -- APPLY BUTTON
+        -- ========================================================================
+        APPLY_BUTTON_TEXT = "Apply",
+
+        -- ========================================================================
+        -- NOTIFICATION BADGE
+        -- ========================================================================
+        NOTIFICATION_TITLE = "Unspent Paragon Points",
+        NOTIFICATION_MESSAGE = "You have unspent Paragon points!",
+        NOTIFICATION_DISMISS = "Click to dismiss this notification.",
 
         -- ========================================================================
         -- TUTORIAL MODE

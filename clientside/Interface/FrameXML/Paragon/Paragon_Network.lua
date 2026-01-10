@@ -29,18 +29,12 @@ ParagonData = {
 }
 
 --- Pending changes queue for stat modifications
--- Implements a debounce system to batch multiple stat changes into a single
--- server request after 1 seconds of inactivity
+-- Stores all local modifications before applying them to the server
+-- Changes are only sent when the user clicks the Apply button
 -- @table PendingChanges
--- @field stats table Map of "categoryId_statId" -> {categoryId, statId, value}
--- @field timer table|nil C_Timer handle for the debounce timer
--- @field delay number Delay in seconds before sending (default: 1)
--- @field lastUpdate number Timestamp of last modification (unused, reserved for future use)
+-- @field stats table Map of "categoryId_statId" -> {categoryId, statId, value, originalValue}
 PendingChanges = {
-    stats = {},
-    timer = nil,
-    delay = 1,
-    lastUpdate = 0
+    stats = {}
 }
 
 local Locale = GetLocaleTable()
@@ -62,6 +56,7 @@ local Addon = {
         [3] = "UIParagon_OnReceiveAllData",           -- Receive all data in bulk
         [4] = "UIParagon_OnReceiveAvailablePoints",   -- Receive available points to spend
         [5] = "UIParagon_OnReceiveStatistic",         -- Receive amount for specific statistic
+        [6] = "UIParagon_OnReceiveTargetLevel",      -- Receive player target paragon level
     }
 }
 
@@ -144,6 +139,11 @@ function UIParagon_OnClientReceiveLevel(player, arg_table)
     if UIParagon and UIParagon.TopBanner and UIParagon.TopBanner.Level then
         UIParagon.TopBanner.Level.Text:SetText(level)
     end
+
+    -- Re-enable notification on level up
+    if ParagonMicroButton_OnLevelUp then
+        ParagonMicroButton_OnLevelUp()
+    end
 end
 
 --- Handles experience update from server (Hook ID: 2)
@@ -207,6 +207,11 @@ function UIParagon_OnReceiveAvailablePoints(player, arg_table)
     local points = arg_table[1] or arg_table.points or 0
     ParagonData.availablePoints = points
     UpdateAvailablePointsDisplay()
+
+    -- Update notification badge based on new points
+    if ParagonMicroButton_UpdateNotification then
+        ParagonMicroButton_UpdateNotification()
+    end
 end
 
 function UIParagon_OnReceiveStatistic(player, arg_table)
@@ -226,13 +231,38 @@ function UIParagon_OnReceiveStatistic(player, arg_table)
     UIParagon_UpdateStatDisplay(category_id, id, value)
 end
 
+---
+--- Handles target Paragon level update from server (Hook ID: 6)
+--- Updates the target level display frame
+--- @param player table Player object (provided by server, unused in this context)
+--- @param arg_table table Arguments from server: {level}
+--- @usage Server call: SendServerResponse("ParagonAnniversary", 6, 150)
+---
+function UIParagon_OnReceiveTargetLevel(player, arg_table)
+    local level = arg_table[1]
+
+    if not ParagonTargetLevel then
+        return
+    end
+
+    -- If level is 0 or nil, hide visually using alpha (target is not a player or has no Paragon data)
+    if not level or level <= 0 then
+        ParagonTargetLevel:SetAlpha(0)
+        return
+    end
+
+    -- Update the level text and show the frame
+    ParagonTargetLevel.Text:SetText(level)
+    ParagonTargetLevel:SetAlpha(1)
+end
+
 -- ============================================================================
 -- CLIENT STAT MODIFICATION FUNCTIONS
 -- ============================================================================
 
---- Modifies a stat value locally and queues change for server update
--- Updates the stat in ParagonData, adds to pending changes queue, updates UI,
--- and resets the debounce timer (3 seconds before sending to server)
+--- Modifies a stat value locally and stores change in pending queue
+-- Updates the stat display in the UI but does NOT send to server immediately
+-- Changes are stored until the user clicks the Apply button
 -- @param categoryId number The category ID containing the stat
 -- @param statId number The stat ID to modify
 -- @param delta number Amount to add/subtract (can be negative)
@@ -253,24 +283,39 @@ function UIParagon_ModifyStatValue(categoryId, statId, delta)
 
     if not stat then return end
 
-    -- Calculate new value (prevent negative values)
-    local newValue = stat.value + delta
-    if newValue < 0 then newValue = 0 end
-    stat.value = newValue
-
-    -- Queue change for server update (using composite key)
+    -- Create composite key for tracking changes
     local key = categoryId .. "_" .. statId
-    PendingChanges.stats[key] = {
-        categoryId = categoryId,
-        statId = statId,
-        value = newValue
-    }
+
+    -- If this is the first change for this stat, store the original value
+    if not PendingChanges.stats[key] then
+        PendingChanges.stats[key] = {
+            categoryId = categoryId,
+            statId = statId,
+            value = stat.value,  -- Current value will be updated below
+            originalValue = stat.value  -- Store original value for reset/cancel
+        }
+    end
+
+    -- Calculate new value (prevent negative values)
+    local newValue = PendingChanges.stats[key].value + delta
+    if newValue < 0 then newValue = 0 end
+
+    -- Update the pending change value
+    PendingChanges.stats[key].value = newValue
 
     -- Update UI display immediately for responsive feel
     UIParagon_UpdateStatDisplay(categoryId, statId, newValue)
 
-    -- Reset debounce timer (waits 3 seconds after last change before sending)
-    UIParagon_ResetDebounceTimer()
+    -- Check if the new value is different from the original value
+    local originalValue = PendingChanges.stats[key].originalValue
+    if newValue == originalValue then
+        -- Value returned to original, remove from pending changes and clear visual marker
+        PendingChanges.stats[key] = nil
+        UIParagon_MarkStatAsModified(categoryId, statId, false)
+    else
+        -- Value is different, mark as modified
+        UIParagon_MarkStatAsModified(categoryId, statId, true)
+    end
 end
 
 --- Updates the visual display of a stat value in the UI
@@ -316,27 +361,11 @@ function UIParagon_UpdateStatDisplay(categoryId, statId, newValue)
     end
 end
 
---- Resets the debounce timer to batch stat changes
--- Cancels any existing timer and creates a new one with 3-second delay
--- Multiple rapid changes reset the timer, so only the final state is sent
--- @usage Called by UIParagon_ModifyStatValue after each stat change
-function UIParagon_ResetDebounceTimer()
-    -- Cancel existing timer to restart the countdown
-    if PendingChanges.timer then
-        C_Timer.Cancel(PendingChanges.timer)
-        PendingChanges.timer = nil
-    end
-
-    -- Create new timer that fires after delay (default: 3 seconds)
-    PendingChanges.timer = C_Timer.After(PendingChanges.delay, function()
-        UIParagon_SendPendingChanges()
-    end)
-end
-
 --- Sends all pending stat changes to the server
 -- Converts the pending changes map to an array and sends via SendClientRequest
--- Clears the pending changes queue and timer after sending
--- @usage Called automatically by debounce timer after 3 seconds of inactivity
+-- Clears the pending changes queue after sending
+-- Updates the actual ParagonData.stats values to match the applied changes
+-- @usage Called when the user clicks the Apply button
 function UIParagon_SendPendingChanges()
     -- Early exit if no pending changes
     if not PendingChanges.stats or not next(PendingChanges.stats) then
@@ -345,18 +374,31 @@ function UIParagon_SendPendingChanges()
 
     -- Convert map of changes to array format expected by server
     local changes = {}
-    for key, change in pairs(PendingChanges.stats) do
+    for _, change in pairs(PendingChanges.stats) do
         table.insert(changes, {
             categoryId = change.categoryId,
             statId = change.statId,
             value = change.value
         })
+
+        -- Update the actual stat value in ParagonData to match the applied change
+        local categoryStats = ParagonData.stats[change.categoryId]
+        if categoryStats then
+            for _, stat in ipairs(categoryStats) do
+                if stat.id == change.statId then
+                    stat.value = change.value
+                    break
+                end
+            end
+        end
+
+        -- Remove visual modification indicator
+        UIParagon_MarkStatAsModified(change.categoryId, change.statId, false)
     end
 
     -- Send batched changes to server (function 2)
     SendClientRequest(Addon.Prefix, 2, changes)
 
-    -- Clear queue and timer after successful send
+    -- Clear queue after successful send
     PendingChanges.stats = {}
-    PendingChanges.timer = nil
 end

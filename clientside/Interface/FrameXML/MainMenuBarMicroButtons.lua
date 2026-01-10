@@ -212,8 +212,83 @@ function ToggleParagonFrame()
 	if (UIParagon:IsShown()) then
 		UIParagon:Hide();
 		ParagonMicroButton_SetNormal();
+		if ParagonMicroButton and ParagonMicroButton.Notification then
+			ParagonMicroButton.Notification.dismissed = false
+		end
+		if ParagonMicroButton_UpdateNotification then
+			ParagonMicroButton_UpdateNotification()
+		end
 	else
 		UIParagon:Show();
 		ParagonMicroButton_SetPushed();
+		if ParagonMicroButton.Notification then
+			ParagonMicroButton.Notification:Hide()
+		end
+	end
+end
+
+-- Notification badge functions
+function ParagonMicroButton_Notification_OnLoad(self)
+	self.pulseTimer = 0
+	self.dismissed = false  -- Track if user manually dismissed the notification
+end
+
+function ParagonMicroButton_Notification_OnUpdate(self, elapsed)
+	if self:IsShown() then
+		self.pulseTimer = self.pulseTimer + elapsed
+		local alpha = 0.5 + (math.sin(self.pulseTimer * 3) * 0.3)  -- Pulse between 0.2 and 0.8
+		if self.Glow then
+			self.Glow:SetAlpha(alpha)
+		end
+	end
+end
+
+function ParagonMicroButton_Notification_OnClick(self)
+	self.dismissed = true
+	self:Hide()
+	PlaySound("igMainMenuOptionCheckBoxOn")
+end
+
+function ParagonMicroButton_Notification_OnEnter(self)
+	local Locales = GetLocaleTable and GetLocaleTable() or {}
+	local title = Locales.NOTIFICATION_TITLE or "Unspent Paragon Points"
+	local message = Locales.NOTIFICATION_MESSAGE or "You have unspent Paragon points!"
+	local dismiss = Locales.NOTIFICATION_DISMISS or "Click to dismiss this notification."
+
+	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	GameTooltip:SetText(title, 1.0, 0.82, 0, 1)
+	GameTooltip:AddLine(message, 1, 1, 1, 1)
+	GameTooltip:AddLine(" ", 1, 1, 1, 1)
+	GameTooltip:AddLine(dismiss, 0.5, 0.5, 0.5, 1)
+	GameTooltip:Show()
+end
+
+-- Update notification visibility based on available points
+function ParagonMicroButton_UpdateNotification()
+	if not ParagonMicroButton or not ParagonMicroButton.Notification then
+		return
+	end
+
+	local notification = ParagonMicroButton.Notification
+
+	-- Only show if:
+	-- 1. Player has unspent points
+	-- 2. Notification was not manually dismissed
+	-- 3. Paragon frame is not currently open
+	local hasUnspentPoints = ParagonData and ParagonData.availablePoints and ParagonData.availablePoints > 0
+	local frameNotOpen = not (UIParagon and UIParagon:IsShown())
+
+	if hasUnspentPoints and not notification.dismissed and frameNotOpen then
+		notification:Show()
+	else
+		notification:Hide()
+	end
+end
+
+-- Re-enable notification when player gains a level
+function ParagonMicroButton_OnLevelUp()
+	if ParagonMicroButton and ParagonMicroButton.Notification then
+		ParagonMicroButton.Notification.dismissed = false
+		ParagonMicroButton_UpdateNotification()
 	end
 end

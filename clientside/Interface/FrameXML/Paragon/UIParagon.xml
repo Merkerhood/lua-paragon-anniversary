@@ -6,6 +6,7 @@
     <Script file="Paragon_Animations.lua"/>
     <Script file="Paragon_Tutorial.lua"/>
     <Script file="Paragon_Interface.lua"/>
+    <Script file="Paragon_TargetLevel.lua"/>
 
     <!-- Custom Font -->
     <Font name="Game24Font" virtual="true" font="Fonts\FRIZQT__.ttf">
@@ -49,6 +50,52 @@
                 </FontString>
             </Layer>
         </Layers>
+    </Frame>
+
+    <Frame name="ParagonTargetLevel" parent="TargetFrame" hidden="false" frameLevel="999">
+        <Size x="50" y="50"/>
+        <Anchors>
+            <Anchor point="CENTER" relativeTo="TargetFrame" relativePoint="CENTER">
+                <Offset>
+                    <AbsDimension x="41" y="-30"/>
+                </Offset>
+            </Anchor>
+        </Anchors>
+
+        <!-- Background ring texture -->
+        <Layers level="BACKGROUND">
+            <Layer>
+                <Texture file="Interface/Common/portrait-ring-withbg"/>
+            </Layer>
+        </Layers>
+
+        <!-- Level text overlay -->
+        <Layers level="OVERLAY">
+            <Layer>
+                <FontString name="$parentText" parentKey="Text" inherits="GameFontNormalSmall" text="0">
+                    <Color r="0.812" g="0.373" b="0.878"/>
+                    <Anchors>
+                        <Anchor point="CENTER">
+                            <Offset>
+                                <AbsDimension x="-1" y="0"/>
+                            </Offset>
+                        </Anchor>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+
+        <Scripts>
+            <OnLoad>
+                ParagonTargetLevel_OnLoad(self)
+            </OnLoad>
+            <OnUpdate>
+                ParagonTargetLevel_OnUpdate(self, elapsed)
+            </OnUpdate>
+            <OnHide>
+                ParagonTargetLevel_OnHide(self)
+            </OnHide>
+        </Scripts>
     </Frame>
 
     <!-- Stat Item Template (icon + value) -->
@@ -189,7 +236,7 @@
 
     <!-- Main Paragon Frame -->
     <Frame name="UIParagon" parent="UIParent" hidden="true" inherits="PortraitFrame2X">
-        <Size x="750" y="550"/>
+        <Size x="750" y="600"/>
         <Anchors>
             <Anchor point="CENTER"/>
         </Anchors>
@@ -217,6 +264,25 @@
         </Layers>
 
         <Frames>
+            <!-- Title -->
+            <Frame name="$parentTitle" parentKey="Title" toplevel="true" frameLevel="11">
+                <Size x="150" y="150"/>
+
+                <Anchors>
+                    <Anchor point="TOP"/>
+                </Anchors>
+
+                <Layers>
+                    <Layer level="BORDER">
+                        <FontString name="$parentText" parentKey="Text" inherits="GameFontNormal" text="Paragon Anniversary">
+                            <Anchors>
+                                <Anchor point="TOP" x="0" y="7"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+
             <!-- Top Banner (Level + Experience Bar) -->
             <Frame name="$parentTopBanner" parentKey="TopBanner">
                 <Size x="650" y="100"/>
@@ -448,6 +514,33 @@
                     </Frame>
                 </Frames>
             </Frame>
+
+            <!-- Accept Buttons -->
+            <Button name="$parentApplyButton" parentKey="ApplyButton" inherits="BigRedThreeSliceButtonTemplate">
+                <Size x="160" y="30"/>
+                <Anchors>
+                    <Anchor point="BOTTOM" x="0" y="10"/>
+                </Anchors>
+
+                <Layers>
+                    <Layer level="OVERLAY">
+                        <FontString name="$parentText" parentKey="Text" inherits="GameFontNormal">
+                            <Anchors>
+                                <Anchor point="CENTER" x="0" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+
+                <Scripts>
+                    <OnLoad>
+                        UIParagon_ApplyButton_OnLoad(self)
+                    </OnLoad>
+                    <OnClick>
+                        UIParagon_ApplyButton_OnClick(self)
+                    </OnClick>
+                </Scripts>
+            </Button>
         </Frames>
 
         <Scripts>

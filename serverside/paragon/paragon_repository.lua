@@ -56,6 +56,9 @@ end
 --- 9. Default Configuration: Initial system settings
 ---
 function Repository:ExecuteMigration()
+    -- Database Creation
+    CharDBExecute(sf(Constants.QUERY.CR_DB, Constants.DB_NAME))
+
     -- Configuration tables
     CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_CAT, Constants.DB_NAME))
     CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_STAT, Constants.DB_NAME, Constants.DB_NAME))
