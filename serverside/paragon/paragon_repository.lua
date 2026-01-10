@@ -35,54 +35,94 @@ local sf = string.format
 -- ============================================================================
 
 ---
---- Initializes the Repository and executes database migrations.
+--- Initializes the Repository and verifies database schema.
 ---
 function Repository:new()
-    self:ExecuteMigration()
+    self:VerifyDatabaseSchema()
 end
 
 ---
---- Executes database schema migrations on initialization.
+--- Verifies that the database schema has been properly set up.
 ---
---- Creates all necessary tables, triggers, and default configuration:
---- 1. paragon_config_category: Category definitions
---- 2. paragon_config_statistic: Stat configs with properties
---- 3. paragon_config: General key-value settings
---- 4. paragon_config_experience_*: Experience reward overrides
---- 5. character_paragon: Character level/experience (character-linked paragon)
---- 6. account_paragon: Account-wide level/experience (account-linked paragon)
---- 7. character_paragon_stats: Character stat investments
---- 8. Triggers: Validation for config stat insertions/updates
---- 9. Default Configuration: Initial system settings
+--- IMPORTANT: Database migrations must be executed manually by running
+--- the SQL files in the sql/ directory. This method only verifies that
+--- the required tables exist.
 ---
-function Repository:ExecuteMigration()
-    -- Database Creation
-    CharDBExecute(sf(Constants.QUERY.CR_DB, Constants.DB_NAME))
+--- If tables are missing, displays an error message with instructions.
+---
+function Repository:VerifyDatabaseSchema()
+    local required_tables = {
+        "paragon_config_category",
+        "paragon_config_statistic",
+        "paragon_config",
+        "paragon_config_experience_creature",
+        "paragon_config_experience_achievement",
+        "paragon_config_experience_skill",
+        "paragon_config_experience_quest",
+        "character_paragon",
+        "account_paragon",
+        "character_paragon_stats"
+    }
 
-    -- Configuration tables
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_CAT, Constants.DB_NAME))
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_STAT, Constants.DB_NAME, Constants.DB_NAME))
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG, Constants.DB_NAME))
+    local missing_tables = {}
 
-    -- Experience reward configuration tables
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_EXP_CREATURE, Constants.DB_NAME))
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_EXP_ACHIEVEMENT, Constants.DB_NAME))
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_EXP_SKILL, Constants.DB_NAME))
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_CONFIG_EXP_QUEST, Constants.DB_NAME))
+    -- First check if database exists using information_schema (avoids MySQL warnings)
+    local db_exists = CharDBQuery(sf("SHOW DATABASES LIKE '%s';", Constants.DB_NAME))
+    if not db_exists then
+        print("=================================================================")
+        print("[PARAGON SYSTEM ERROR] Database not found!")
+        print("=================================================================")
+        print("")
+        print("The database '" .. Constants.DB_NAME .. "' does not exist.")
+        print("")
+        print("SOLUTION:")
+        print("  1. Navigate to: lua-paragon-anniversary/sql/")
+        print("  2. Edit and Execute 01_create_database.sql")
+        print("  3. Execute all other SQL files (02 through 06)")
+        print("  4. Reload Eluna scripts: .reload eluna")
+        print("")
+        print("See sql/README.md or INSTALLATION.md for detailed instructions.")
+        print("=================================================================")
+        error("[Paragon System] Database does not exist. Please install SQL migrations.")
+    end
 
-    -- Paragon progression tables (both always created, system uses correct one based on config)
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_PARA_CHARACTER, Constants.DB_NAME))
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_PARA_ACCOUNT, Constants.DB_NAME))
-    CharDBExecute(sf(Constants.QUERY.CR_TABLE_PARA_STAT, Constants.DB_NAME))
+    -- Check each table using information_schema (avoids MySQL warnings)
+    for _, table_name in ipairs(required_tables) do
+        local result = CharDBQuery(sf(
+            "SELECT 1 FROM information_schema.tables WHERE table_schema = '%s' AND table_name = '%s' LIMIT 1;",
+            Constants.DB_NAME,
+            table_name
+        ))
 
-    -- Validation triggers
-    CharDBExecute(sf(Constants.QUERY.CT_TRIGGER_BU_CONFIG_STAT, Constants.DB_NAME, Constants.DB_NAME))
-    CharDBExecute(sf(Constants.QUERY.CT_TRIGGER_BI_CONFIG_STAT, Constants.DB_NAME, Constants.DB_NAME))
+        if not result then
+            table.insert(missing_tables, table_name)
+        end
+    end
 
-    -- Insert default configuration settings (only if not already present)
-    CharDBExecute(sf(Constants.QUERY.INS_DEFAULT_CONFIG, Constants.DB_NAME))
+    if #missing_tables > 0 then
+        print("=================================================================")
+        print("[PARAGON SYSTEM ERROR] Database schema incomplete!")
+        print("=================================================================")
+        print("")
+        print("Missing tables:")
+        for _, table_name in ipairs(missing_tables) do
+            print("  - " .. table_name)
+        end
+        print("")
+        print("SOLUTION:")
+        print("  1. Navigate to: lua_scripts/game/systems/paragon/sql/")
+        print("  2. Execute all SQL files in order (01 through 06)")
+        print("  3. Reload Eluna scripts: .reload eluna")
+        print("")
+        print("See sql/README.md or INSTALLATION.md for detailed instructions.")
+        print("=================================================================")
+        error("[Paragon System] Database schema verification failed. Please install SQL migrations.")
+    end
 
-    -- Publish with deferred execution to allow modules to register callbacks after migration
+    print("[Paragon System] Database schema verified successfully.")
+
+    -- Publish event to allow modules to register their custom configurations
+    -- This happens AFTER schema verification to ensure tables exist
     MediatorTimerAdapter.Publish("OnAfterMigrationExecute", {
         arguments = { self },
         deferred = true,

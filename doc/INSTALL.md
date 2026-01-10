@@ -46,15 +46,74 @@ your_ale_scripts_directory/
     │   └── CSMH/
     ├── modules/
     │   └── paragon_anniversary.lua
+    ├── sql/
+    │   ├── 01_create_database.sql
+    │   ├── 02_create_config_tables.sql
+    │   ├── 03_create_experience_tables.sql
+    │   ├── 04_create_paragon_tables.sql
+    │   ├── 05_create_triggers.sql
+    │   ├── 06_insert_default_config.sql
+    │   └── README.md
     ├── paragon_class.lua
     ├── paragon_config.lua
     ├── paragon_constant.lua
     ├── paragon_hook.lua
     ├── paragon_repository.lua
-    └── HOOKS.md
+    ├── HOOKS.md
+    └── INSTALLATION.md
 ```
 
-### Step 2: Verify ALE Configuration
+### Step 2: Execute SQL Migrations
+
+**IMPORTANT:** You **MUST** execute all SQL migration files manually **BEFORE** starting your server.
+
+Navigate to the `sql/` directory and execute all files in order using your MySQL client:
+
+```sql
+-- Execute in this exact order:
+SOURCE 01_create_database.sql;
+SOURCE 02_create_config_tables.sql;
+SOURCE 03_create_experience_tables.sql;
+SOURCE 04_create_paragon_tables.sql;
+SOURCE 05_create_triggers.sql;
+SOURCE 06_insert_default_config.sql;
+```
+
+**Alternative methods:**
+- Use MySQL Workbench, HeidiSQL, DBeaver, or any MySQL client
+- Execute all files at once by running them in sequence
+- Use command line: `mysql -u username -p < filename.sql`
+
+### Step 3: Verify Database Installation
+
+Check the database to confirm all tables were created:
+
+```sql
+-- Connect to the database
+USE acore_ale;  -- or your configured database name
+
+-- Verify all paragon tables exist
+SHOW TABLES LIKE 'paragon%';
+SHOW TABLES LIKE '%paragon%';
+
+-- Expected tables (10 total):
+-- paragon_config
+-- paragon_config_category
+-- paragon_config_statistic
+-- paragon_config_experience_achievement
+-- paragon_config_experience_creature
+-- paragon_config_experience_quest
+-- paragon_config_experience_skill
+-- character_paragon
+-- character_paragon_stats
+-- account_paragon
+
+-- Verify default configuration was inserted
+SELECT COUNT(*) FROM paragon_config;
+-- Should return at least 17 rows
+```
+
+### Step 4: Verify ALE Configuration
 
 Ensure your ALE configuration in `mod-ale.conf` includes:
 
@@ -64,45 +123,28 @@ ALE.Enabled = 1
 ALE.ScriptPath = "lua_scripts"
 ```
 
-### Step 3: Start the Server
+### Step 5: Start the Server
 
-Restart your AzerothCore server. The system will automatically:
+Start or restart your AzerothCore server. The system will:
 
-1. ✅ Load the Paragon scripts
-2. ✅ Create all required database tables
-3. ✅ Initialize default configuration values
-4. ✅ Load configuration from the database
+1. ✅ Verify the database schema exists
+2. ✅ Load the Paragon scripts
+3. ✅ Load configuration from the database
+4. ✅ Initialize all modules
 
 ```bash
-# Restart AzerothCore
+# Start AzerothCore
 ./worldserver
 ```
 
-Monitor the server console for any error messages related to Paragon initialization.
-
-### Step 4: Verify Installation
-
-Check the database to confirm tables were created:
-
-```sql
--- Connect to your AzerothCore database
-USE acore_ale;  -- or your world database name
-
--- Verify paragon configuration tables exist
-SHOW TABLES LIKE 'paragon%';
-
--- Expected tables:
--- paragon_config
--- paragon_config_category
--- paragon_config_experience_achievement
--- paragon_config_experience_creature
--- paragon_config_experience_quest
--- paragon_config_experience_skill
--- paragon_config_statistic
--- character_paragon
--- character_paragon_stats
--- account_paragon  (if using account-linked mode)
+**Expected console output:**
 ```
+[Paragon System] Database schema verified successfully.
+[Paragon] Paragon Anniversary Experience module loaded
+[Paragon] Paragon Anniversary Level Animation module loaded
+```
+
+Monitor the server console for any error messages related to Paragon initialization.
 
 ---
 
@@ -260,18 +302,49 @@ Once the client addon is complete:
 
 ## 🔧 Troubleshooting
 
-### Tables Not Created
+### Error: "Database schema not initialized!" or "Database not found!"
 
-**Problem**: Database tables don't exist after server restart
+**Problem**: Server shows error message about missing database or tables
+
+**Error message example:**
+```
+=================================================================
+[PARAGON SYSTEM ERROR] Database not found!
+=================================================================
+
+The database 'acore_ale' does not exist.
+
+SOLUTION:
+  1. Navigate to: lua_scripts/game/systems/paragon/sql/
+  2. Execute 01_create_database.sql
+  3. Execute all other SQL files (02 through 06)
+  4. Reload Eluna scripts: .reload eluna
+=================================================================
+```
 
 **Solutions**:
+1. You haven't executed the SQL migration files yet (see Step 2 above)
+2. Check which tables are missing:
 ```sql
--- Check if tables exist
 SHOW TABLES LIKE 'paragon%';
-
--- If missing, manually run creation script
--- (Usually auto-created, but you can run the SQL from paragon_constant.lua)
 ```
+3. Execute the missing SQL files from the `sql/` directory
+4. Reload Eluna scripts: `.reload eluna` or restart the server
+
+### Error: "Table already exists"
+
+**Problem**: SQL execution shows "Table already exists" warnings
+
+**Solution**: This is normal and safe to ignore. The SQL files use `CREATE TABLE IF NOT EXISTS`, so they can be run multiple times without issues.
+
+### Custom Database Name
+
+**Problem**: You're using a different database name than `acore_ale`
+
+**Solutions**:
+1. Edit `paragon_constant.lua` and change the `DB_NAME` constant to your database name
+2. Replace all occurrences of `acore_ale` in the SQL files with your database name
+3. Re-execute the SQL files
 
 ### Experience Not Being Awarded
 
