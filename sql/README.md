@@ -56,6 +56,31 @@ SELECT COUNT(*) FROM acore_ale.paragon_config;
 
 If you start the server without executing these migration files, you will see error messages in the console indicating which tables are missing. Simply execute the required SQL files and reload the Lua scripts using `.reload eluna`.
 
+## Example Data
+
+**File:** `11-13-2026_Example_Data.sql`
+
+This file contains a **complete example configuration** with:
+- ✅ **3 Categories**: Combat, Stats, Special
+- ✅ **25+ Statistics**: Fully configured with proper types, values, icons, factors, and limits
+- ✅ **All table structures**: Includes all tables with example data
+
+**When to use this file:**
+- You're setting up a new server and want a working configuration immediately
+- You want to see examples of properly configured statistics
+- You're testing the Paragon system
+
+**How to use:**
+```sql
+-- After executing files 01-06, optionally load the example data:
+SOURCE 11-13-2026_Example_Data.sql;
+```
+
+**Important Notes:**
+- This file uses `DROP TABLE IF EXISTS`, so it will **replace** your existing data
+- If you have custom categories/statistics, back them up before running this file
+- You can use this as a reference and manually insert only the data you need
+
 ## Database Name
 
 **Note:** All SQL files are configured to use the database name `acore_ale`. If you need to use a different database name, you must:

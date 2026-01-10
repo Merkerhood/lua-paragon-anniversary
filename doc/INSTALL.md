@@ -346,6 +346,47 @@ SHOW TABLES LIKE 'paragon%';
 2. Replace all occurrences of `acore_ale` in the SQL files with your database name
 3. Re-execute the SQL files
 
+### No Categories or Statistics Available
+
+**Problem**: The system is installed but no categories or statistics appear in the UI or database
+
+**Cause**: The base migration files (01-06) only create the table structure and default configuration. They **do not** include any example categories or statistics.
+
+**Solutions**:
+
+1. **Use the example data file** - A complete example configuration is provided:
+   ```sql
+   -- Located at: sql/11-13-2026_Example_Data.sql
+   -- This file includes:
+   -- - 3 example categories (Combat, Stats, Special)
+   -- - 25+ configured statistics
+   -- - All properly configured with types, factors, and limits
+
+   SOURCE sql/11-13-2026_Example_Data.sql;
+   ```
+
+2. **Manually create categories and statistics**:
+   ```sql
+   -- Create a category
+   INSERT INTO paragon_config_category (id, name) VALUES (1, 'Combat');
+
+   -- Add a statistic to the category
+   INSERT INTO paragon_config_statistic
+   (id, category, type, type_value, icon, factor, limit, application)
+   VALUES
+   (1, 1, 'COMBAT_RATING', 8, 'Interface\\Icons\\Inv_sword_27', 10, 255, 0);
+   -- Where type_value = 8 is CRIT_MELEE (see paragon_constant.lua for all values)
+   ```
+
+3. **Import from another server** - Export your existing configuration using:
+   ```sql
+   -- Export categories and statistics
+   SELECT * FROM paragon_config_category;
+   SELECT * FROM paragon_config_statistic;
+   ```
+
+**Note**: After adding categories/statistics, you may need to reload the Lua scripts or restart the server for changes to take effect.
+
 ### Experience Not Being Awarded
 
 **Problem**: Players gain creature kills but no paragon XP

@@ -212,6 +212,9 @@ Configure the system via database entries in `paragon_config`:
 - `limit`: Maximum points that can be invested (max 255)
 - `application`: How the stat bonus is applied
 
+**Example Data Available:**
+A complete example configuration with 3 categories and 25+ statistics is provided in `sql/11-13-2026_Example_Data.sql`. Use this as a reference or load it directly to get started quickly.
+
 ---
 
 ## 🎮 Stat Types
@@ -255,90 +258,39 @@ Configure the system via database entries in `paragon_config`:
 
 ---
 
-## 🔧 Technical Details
+## 🔧 Technical Overview
 
-### Design Patterns
+### Architecture
 - **Singleton Pattern**: Config and Repository services
 - **Repository Pattern**: Database abstraction layer
+- **Mediator Pattern**: Event-driven extensibility
 - **Object-Oriented**: Using classic.lua library
 
-### Database
-- **Async Queries**: Non-blocking database operations
-- **Auto-Migration**: Tables created automatically on startup
-- **Normalized Schema**: Separated config and character data
+### Key Features
+- **Async Database**: Non-blocking queries
+- **Manual Migrations**: SQL files in `sql/` directory
+- **Client Communication**: Custom addon protocol (`ParagonAnniversary`)
+- **Extensible**: Module system via Mediator events
 
-### Client Communication
-- **Protocol**: `ParagonAnniversary` addon prefix
-- **Commands**:
-  - `1`: Load paragon data (sends level, experience, and all statistics)
-  - `2`: Update statistics (receives updated stat values from client)
-
-### Event Hooks
-- **PLAYER_EVENT_ON_LOGIN (3)**: Load paragon data on login
-- **PLAYER_EVENT_ON_LOGOUT (4)**: Save paragon data on logout
-- **PLAYER_EVENT_ON_KILL_CREATURE (7)**: Award paragon experience for creature kills
-- **PLAYER_EVENT_ON_ACHIEVEMENT_COMPLETE (45)**: Award paragon experience for achievements
-- **PLAYER_EVENT_ON_QUEST_COMPLETE (54)**: Award paragon experience for quests
-- **PLAYER_EVENT_ON_SKILL_UPDATE (62)**: Award paragon experience for skill increases
-- **SERVER_EVENT_ON_LUA_STATE_OPEN (33)**: Reload paragon data for all players when Lua state opens
-- **SERVER_EVENT_ON_LUA_STATE_CLOSE (16)**: Save paragon data for all players when Lua state closes
-
----
-
-## 🎓 Experience & Points System
-
-### Experience Sources
-Paragon experience is awarded from multiple activities:
-- **🐉 Creatures**: Kill monsters and bosses
-- **🏆 Achievements**: Complete achievement goals
-- **📜 Quests**: Complete quests
-- **🎯 Skills**: Increase character skills
-
-Experience rewards are configurable per source with:
-- **Universal default**: Base experience reward value for each source type
-- **Specific rewards**: Custom experience values per creature/achievement/quest/skill ID (overrides universal default)
-
-### Points System
-- **Earning**: Players earn a configurable number of points per paragon level (`POINTS_PER_LEVEL`)
-- **Available Points**: Points = (Level × Points Per Level) - (Total Points Spent)
-- **Investing**: Allocate points to statistics with configured limits per stat (max 255 points each)
-- **Validation**: Server validates all point allocations before applying stat bonuses
+**📖 Detailed Technical Documentation**:
+- [HOOKS.md](doc/HOOKS.md) - Complete Mediator event system
+- [MODULES.md](doc/MODULES.md) - Creating custom modules
+- [LIBRARIES.md](doc/LIBRARIES.md) - Library documentation
 
 ---
 
 ## 📚 Documentation
 
-The Paragon System includes comprehensive documentation:
+Complete documentation is available in the `doc/` directory:
 
-### Code Documentation
+| Document | Description |
+|----------|-------------|
+| **[INSTALL.md](doc/INSTALL.md)** | Complete installation guide with SQL setup |
+| **[HOOKS.md](doc/HOOKS.md)** | Mediator event system reference |
+| **[MODULES.md](doc/MODULES.md)** | Creating custom modules |
+| **[LIBRARIES.md](doc/LIBRARIES.md)** | Classic, CSMH, and Mediator libraries |
 
-All code is fully documented with **LuaDoc** comments:
-
-```lua
---- Adds points to the available paragon points
--- @param points The amount of points to add
--- @return Self for method chaining
-function Paragon:AddPoints(points)
-    return self:SetPoints(self:GetPoints() + points)
-end
-
---- Retrieves the paragon experience reward for a creature by entry ID
--- @param entry The creature entry ID
--- @return The experience reward value or nil if not configured
-function Config:GetCreatureExperience(entry)
-    return self.experience.creature[entry]
-end
-```
-
-### Documentation Files
-
-Complete guides and API documentation are available in the `doc/` directory:
-
-- **[Installation Guide](doc/INSTALL.md)** - Step-by-step installation and configuration
-- **[Hook Reference](doc/HOOKS.md)** - Complete Mediator hooks specification
-- **[Module Development](doc/MODULES.md)** - Guide for creating custom modules
-- **[Libraries](doc/LIBRARIES.md)** - Documentation for Classic, CSMH, and Mediator
-- **[Development Roadmap](doc/TODO.md)** - Planned features and development tasks
+All code includes **LuaDoc** comments for inline documentation.
 
 ---
 
@@ -387,6 +339,16 @@ doc/
 ├── HOOKS.md                        # Complete hook documentation
 ├── MODULES.md                      # Module development guide
 └── LIBRARIES.md                    # Libraries documentation (Classic, CSMH, Mediator)
+
+sql/
+├── 01_create_database.sql          # Database creation
+├── 02_create_config_tables.sql     # Configuration tables
+├── 03_create_experience_tables.sql # Experience reward tables
+├── 04_create_paragon_tables.sql    # Paragon progression tables
+├── 05_create_triggers.sql          # Validation triggers
+├── 06_insert_default_config.sql    # Default configuration
+├── 11-13-2026_Example_Data.sql     # Example categories & statistics
+└── README.md                       # SQL installation guide
 ```
 
 ---
