@@ -81,6 +81,13 @@ function Repository:ExecuteMigration()
 
     -- Insert default configuration settings (only if not already present)
     CharDBExecute(sf(Constants.QUERY.INS_DEFAULT_CONFIG, Constants.DB_NAME))
+
+    -- Publish with deferred execution to allow modules to register callbacks after migration
+    MediatorTimerAdapter.Publish("OnAfterMigrationExecute", {
+        arguments = { self },
+        deferred = true,
+        flushDelay = 250
+    })
 end
 
 -- ============================================================================
