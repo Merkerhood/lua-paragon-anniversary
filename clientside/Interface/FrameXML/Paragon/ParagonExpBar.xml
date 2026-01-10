@@ -3,7 +3,7 @@
 	<Script file="ParagonExpBar.lua"/>
 
 	<!-- Paragon Experience Bar - Positioned above MainMenuBar -->
-	<Frame name="ParagonExpBar" enableMouse="true" parent="MainMenuBar" hidden="true">
+	<Frame name="ParagonExpBar" enableMouse="true" parent="MainMenuBar" hidden="true" frameLevel="-1">
 		<Size>
 			<AbsDimension x="1024" y="11"/>
 		</Size>
