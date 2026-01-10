@@ -159,6 +159,11 @@ function UIParagon_OnLoad(self)
 
     -- Request initial data from server (Hook ID: 1)
     SendClientRequest("ParagonAnniversary", 1)
+
+    -- Update notification badge on load (will show if player has unspent points)
+    if ParagonMicroButton_UpdateNotification then
+        ParagonMicroButton_UpdateNotification()
+    end
 end
 
 --- Called when UIParagon frame is shown

@@ -138,6 +138,11 @@ function UIParagon_OnClientReceiveLevel(player, arg_table)
     if UIParagon and UIParagon.TopBanner and UIParagon.TopBanner.Level then
         UIParagon.TopBanner.Level.Text:SetText(level)
     end
+
+    -- Re-enable notification on level up
+    if ParagonMicroButton_OnLevelUp then
+        ParagonMicroButton_OnLevelUp()
+    end
 end
 
 --- Handles experience update from server (Hook ID: 2)
@@ -201,6 +206,11 @@ function UIParagon_OnReceiveAvailablePoints(player, arg_table)
     local points = arg_table[1] or arg_table.points or 0
     ParagonData.availablePoints = points
     UpdateAvailablePointsDisplay()
+
+    -- Update notification badge based on new points
+    if ParagonMicroButton_UpdateNotification then
+        ParagonMicroButton_UpdateNotification()
+    end
 end
 
 function UIParagon_OnReceiveStatistic(player, arg_table)

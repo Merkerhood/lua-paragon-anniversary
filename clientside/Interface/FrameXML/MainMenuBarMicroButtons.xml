@@ -116,6 +116,60 @@
 				</Texture>
 			</Layer>
 		</Layers>
+		<Frames>
+			<!-- Notification Badge for unspent points -->
+			<Button name="$parentNotification" parentKey="Notification" hidden="true" frameLevel="10">
+				<Size>
+					<AbsDimension x="18" y="18"/>
+				</Size>
+				<Anchors>
+					<Anchor point="TOP" relativePoint="TOP">
+						<Offset>
+							<AbsDimension x="8" y="-20"/>
+						</Offset>
+					</Anchor>
+				</Anchors>
+				<Layers>
+					<Layer level="BACKGROUND">
+						<Texture name="$parentBg" parentKey="Bg" file="Interface/Buttons/UI-GroupLoot-Coin-Up">
+							<Size>
+								<AbsDimension x="18" y="18"/>
+							</Size>
+							<Anchors>
+								<Anchor point="CENTER"/>
+							</Anchors>
+						</Texture>
+					</Layer>
+					<Layer level="OVERLAY">
+						<Texture name="$parentGlow" parentKey="Glow" file="Interface/Buttons/UI-GroupLoot-Coin-Up" alphaMode="ADD" alpha="0.8">
+							<Size>
+								<AbsDimension x="22" y="22"/>
+							</Size>
+							<Anchors>
+								<Anchor point="CENTER"/>
+							</Anchors>
+						</Texture>
+					</Layer>
+				</Layers>
+				<Scripts>
+					<OnLoad>
+						ParagonMicroButton_Notification_OnLoad(self)
+					</OnLoad>
+					<OnUpdate>
+						ParagonMicroButton_Notification_OnUpdate(self, elapsed)
+					</OnUpdate>
+					<OnClick>
+						ParagonMicroButton_Notification_OnClick(self)
+					</OnClick>
+					<OnEnter>
+						ParagonMicroButton_Notification_OnEnter(self)
+					</OnEnter>
+					<OnLeave>
+						GameTooltip:Hide()
+					</OnLeave>
+				</Scripts>
+			</Button>
+		</Frames>
 		<Scripts>
 			<OnLoad>
 				LoadMicroButtonTextures(self, "Abilities");
