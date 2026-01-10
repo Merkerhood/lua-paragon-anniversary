@@ -56,6 +56,7 @@ local Addon = {
         [3] = "UIParagon_OnReceiveAllData",           -- Receive all data in bulk
         [4] = "UIParagon_OnReceiveAvailablePoints",   -- Receive available points to spend
         [5] = "UIParagon_OnReceiveStatistic",         -- Receive amount for specific statistic
+        [6] = "UIParagon_OnReceiveTargetLevel",      -- Receive player target paragon level
     }
 }
 
@@ -228,6 +229,31 @@ function UIParagon_OnReceiveStatistic(player, arg_table)
     end
 
     UIParagon_UpdateStatDisplay(category_id, id, value)
+end
+
+---
+--- Handles target Paragon level update from server (Hook ID: 6)
+--- Updates the target level display frame
+--- @param player table Player object (provided by server, unused in this context)
+--- @param arg_table table Arguments from server: {level}
+--- @usage Server call: SendServerResponse("ParagonAnniversary", 6, 150)
+---
+function UIParagon_OnReceiveTargetLevel(player, arg_table)
+    local level = arg_table[1]
+
+    if not ParagonTargetLevel then
+        return
+    end
+
+    -- If level is 0 or nil, hide visually using alpha (target is not a player or has no Paragon data)
+    if not level or level <= 0 then
+        ParagonTargetLevel:SetAlpha(0)
+        return
+    end
+
+    -- Update the level text and show the frame
+    ParagonTargetLevel.Text:SetText(level)
+    ParagonTargetLevel:SetAlpha(1)
 end
 
 -- ============================================================================

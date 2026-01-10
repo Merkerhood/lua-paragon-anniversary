@@ -6,6 +6,7 @@
     <Script file="Paragon_Animations.lua"/>
     <Script file="Paragon_Tutorial.lua"/>
     <Script file="Paragon_Interface.lua"/>
+    <Script file="Paragon_TargetLevel.lua"/>
 
     <!-- Custom Font -->
     <Font name="Game24Font" virtual="true" font="Fonts\FRIZQT__.ttf">
@@ -49,6 +50,52 @@
                 </FontString>
             </Layer>
         </Layers>
+    </Frame>
+
+    <Frame name="ParagonTargetLevel" parent="TargetFrame" hidden="false" frameLevel="999">
+        <Size x="50" y="50"/>
+        <Anchors>
+            <Anchor point="CENTER" relativeTo="TargetFrame" relativePoint="CENTER">
+                <Offset>
+                    <AbsDimension x="41" y="-30"/>
+                </Offset>
+            </Anchor>
+        </Anchors>
+
+        <!-- Background ring texture -->
+        <Layers level="BACKGROUND">
+            <Layer>
+                <Texture file="Interface/Common/portrait-ring-withbg"/>
+            </Layer>
+        </Layers>
+
+        <!-- Level text overlay -->
+        <Layers level="OVERLAY">
+            <Layer>
+                <FontString name="$parentText" parentKey="Text" inherits="GameFontNormalSmall" text="0">
+                    <Color r="0.812" g="0.373" b="0.878"/>
+                    <Anchors>
+                        <Anchor point="CENTER">
+                            <Offset>
+                                <AbsDimension x="-1" y="0"/>
+                            </Offset>
+                        </Anchor>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+
+        <Scripts>
+            <OnLoad>
+                ParagonTargetLevel_OnLoad(self)
+            </OnLoad>
+            <OnUpdate>
+                ParagonTargetLevel_OnUpdate(self, elapsed)
+            </OnUpdate>
+            <OnHide>
+                ParagonTargetLevel_OnHide(self)
+            </OnHide>
+        </Scripts>
     </Frame>
 
     <!-- Stat Item Template (icon + value) -->
