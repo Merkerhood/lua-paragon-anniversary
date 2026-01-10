@@ -246,3 +246,5 @@ RegisterMediatorEvent("OnExperienceCalculated", OnExperienceCalculated)
 
 -- Level-up notifications: React to level changes
 RegisterMediatorEvent("OnParagonLevelChanged", OnParagonLevelChanged)
+
+print("[Paragon] Paragon Anniversary Experience module loaded")
