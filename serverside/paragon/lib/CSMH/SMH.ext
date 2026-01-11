@@ -287,15 +287,15 @@ end
 
 -- API START
 
-function RegisterClientRequests(config)
+function RegisterClientRequests(config, replace)
 	-- If a config table with the Prefix already exists, abort loading it into the register.
-	if(SMH[config.Prefix]) then
+	if(not replace and SMH[config.Prefix]) then
 		return;
 	end
-	
+
 	-- Create subtable for PrefixName
 	SMH[config.Prefix] = {}
-	
+
 	-- Insert function ID and function name into the register table.
 	for functionId, functionName in pairs(config.Functions) do
 		SMH[config.Prefix][functionId] = functionName
