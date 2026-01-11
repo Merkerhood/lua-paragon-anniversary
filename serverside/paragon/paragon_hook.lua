@@ -855,3 +855,5 @@ RegisterServerEvent(33, Hook.OnLuaStateOpen)
 
 -- Addon Communication Events
 RegisterClientRequests(Hook.Addon)
+
+return Hook

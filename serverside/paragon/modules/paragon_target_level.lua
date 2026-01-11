@@ -13,20 +13,14 @@
     @author Paragon Team
 ]]
 
-local Config = require("paragon_config")
 
 -- ============================================================================
 -- MODULE CONFIGURATION
 -- ============================================================================
+local ParagonHook = require("paragon_hook")
+ParagonHook.Addon.Functions[6] = "OnParagonClientRequestTargetLevel"
 
-local TargetLevel = {
-    Addon = {
-        Prefix = "ParagonAnniversary",
-        Functions = {
-            [6] = "OnParagonClientRequestTargetLevel"
-        }
-    }
-}
+RegisterClientRequests(ParagonHook.Addon, true)
 
 -- ============================================================================
 -- SERVER HOOK HANDLERS
@@ -47,18 +41,20 @@ function OnParagonClientRequestTargetLevel(player, _)
         return false
     end
 
+    print("ok")
+
     -- Get the player's current target
     local target = player:GetSelection()
     if not target then
         -- No target selected, send level 0 to hide UI
-        player:SendServerResponse(TargetLevel.Addon.Prefix, 6, 0)
+        player:SendServerResponse(ParagonHook.Addon.Prefix, 6, 0)
         return false
     end
 
     -- Check if target is a player (not a creature/NPC)
     if not target:IsPlayer() then
         -- Target is not a player, send level 0 to hide UI
-        player:SendServerResponse(TargetLevel.Addon.Prefix, 6, 0)
+        player:SendServerResponse(ParagonHook.Addon.Prefix, 6, 0)
         return false
     end
 
@@ -66,13 +62,13 @@ function OnParagonClientRequestTargetLevel(player, _)
     local target_paragon = target:GetData("Paragon")
     if not target_paragon then
         -- Target has no Paragon data (shouldn't happen but handle gracefully)
-        player:SendServerResponse(TargetLevel.Addon.Prefix, 6, 0)
+        player:SendServerResponse(ParagonHook.Addon.Prefix, 6, 0)
         return false
     end
 
     -- Send target's Paragon level to the client
     local target_level = target_paragon:GetLevel()
-    player:SendServerResponse(TargetLevel.Addon.Prefix, 6, target_level or 0)
+    player:SendServerResponse(ParagonHook.Addon.Prefix, 6, target_level or 0)
 
     return true
 end
@@ -80,8 +76,5 @@ end
 -- ============================================================================
 -- MODULE INITIALIZATION
 -- ============================================================================
-
--- Register the addon communication handler
-RegisterClientRequests(TargetLevel.Addon)
 
 print("[Paragon] Paragon Anniversary Target Level module loaded")
