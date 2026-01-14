@@ -41,8 +41,6 @@ function OnParagonClientRequestTargetLevel(player, _)
         return false
     end
 
-    print("ok")
-
     -- Get the player's current target
     local target = player:GetSelection()
     if not target then
