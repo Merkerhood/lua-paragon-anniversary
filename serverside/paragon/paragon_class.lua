@@ -95,7 +95,7 @@ end
 function Paragon:new(player_guid, account_id)
     self.guid = player_guid
 
-    if (Config:GetByField("LEVEL_LINKED_TO_ACCOUNT") == 1) then
+    if (Config:GetByField("LEVEL_LINKED_TO_ACCOUNT") == "1") then
         self.account = account_id
     end
 
@@ -124,7 +124,7 @@ end
 --- @param callback Function to invoke after loading (receives guid, self)
 ---
 function Paragon:Load(callback)
-    if (Config:GetByField("LEVEL_LINKED_TO_ACCOUNT") == 1) then
+    if (Config:GetByField("LEVEL_LINKED_TO_ACCOUNT") == "1") then
         -- Account-linked mode: load from account_paragon
         Repository:GetParagonByAccountId(self.account, function(data)
             if data and data.level then
@@ -156,7 +156,7 @@ end
 --- - If disabled (0): Saves to character_paragon table using character guid
 ---
 function Paragon:Save()
-    if (Config:GetByField("LEVEL_LINKED_TO_ACCOUNT") == 1) then
+    if (Config:GetByField("LEVEL_LINKED_TO_ACCOUNT") == "1") then
         -- Account-linked mode: save to account_paragon
         Repository:SaveParagonByAccount(self.account, self.level, self.exp.current)
     else
